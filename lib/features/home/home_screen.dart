@@ -1,0 +1,719 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/realtime_client.dart';
+import '../../models/ai_message.dart';
+import '../../models/conversation.dart';
+import '../../models/status.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/motif_background.dart';
+import '../account/screens/profile_screen.dart';
+import '../ai/ai_repository.dart';
+import '../auth/auth_controller.dart';
+import '../chat/chat_repository.dart';
+import '../chat/screens/chat_screen.dart';
+import '../contacts/screens/contacts_screen.dart';
+import '../chat/screens/new_group_screen.dart';
+import '../contacts/screens/add_contact_screen.dart';
+import '../contacts/screens/new_chat_screen.dart';
+import '../calls/call_controller.dart';
+import '../calls/call_listener.dart';
+import '../calls/screens/calls_screen.dart';
+import '../status/screens/create_status_screen.dart';
+import '../status/screens/status_viewer_screen.dart';
+import '../status/status_repository.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _tab = 0;
+  RealtimeClient? _realtime;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ouvre la connexion temps réel dès que l'utilisateur est sur l'accueil.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<RealtimeClient>().connect();
+      final user = context.read<AuthController>().user;
+      if (user != null) {
+        context.read<CallController>().bindUser(
+              user.id,
+              user.pseudo ?? user.publicNumber,
+            );
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _realtime ??= context.read<RealtimeClient>();
+  }
+
+  @override
+  void dispose() {
+    _realtime?.disconnect();
+    super.dispose();
+  }
+
+  void _openNewConversationMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.contact_phone, color: AppColors.forest),
+              title: const Text("Ajouter un contact"),
+              subtitle: const Text("Par numéro Alanya à 6 chiffres"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AddContactScreen()),
+                );
+                if (mounted) setState(() {});
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_add, color: AppColors.terracotta),
+              title: const Text("Nouvelle discussion"),
+              subtitle: const Text("Par numéro Alanya"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NewChatScreen()),
+                );
+                if (mounted) setState(() {});
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.group_add, color: AppColors.forest),
+              title: const Text("Nouveau groupe"),
+              subtitle: const Text("Choisir des contacts"),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NewGroupScreen()),
+                );
+                if (mounted) setState(() {});
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tabs = [
+      const _ConversationsTab(),
+      const _StatusTab(),
+      const CallsScreen(),
+      const _AiTab(),
+    ];
+
+    return CallListener(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Alanya"),
+          actions: [
+            IconButton(
+              tooltip: "Contacts",
+              icon: const Icon(Icons.people_alt_outlined),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ContactsScreen()),
+              ),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (v) {
+                if (v == "profile") {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                  );
+                } else if (v == "logout") {
+                  context.read<AuthController>().logout();
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: "profile", child: Text("Mon profil")),
+                const PopupMenuItem(value: "logout", child: Text("Se déconnecter")),
+              ],
+            ),
+          ],
+        ),
+        body: IndexedStack(index: _tab, children: tabs),
+        floatingActionButton: _tab == 0
+            ? FloatingActionButton(
+                backgroundColor: AppColors.forest,
+                onPressed: _openNewConversationMenu,
+                child: const Icon(Icons.chat, color: Colors.white),
+              )
+            : null,
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: (i) => setState(() => _tab = i),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: "Discussions"),
+            NavigationDestination(icon: Icon(Icons.donut_large), label: "Statuts"),
+            NavigationDestination(icon: Icon(Icons.call_outlined), label: "Appels"),
+            NavigationDestination(icon: Icon(Icons.auto_awesome), label: "IA"),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConversationsTab extends StatefulWidget {
+  const _ConversationsTab();
+
+  @override
+  State<_ConversationsTab> createState() => _ConversationsTabState();
+}
+
+class _ConversationsTabState extends State<_ConversationsTab> {
+  List<Conversation>? _convs;
+  bool _error = false;
+  Timer? _pollTimer;
+  StreamSubscription<Map<String, dynamic>>? _rtSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    // Rafraîchit immédiatement la liste à chaque événement temps réel.
+    _rtSub = context.read<RealtimeClient>().events.listen((e) {
+      final t = e["type"];
+      if (t == "message" || t == "read") _poll();
+    });
+    // Rafraîchissement de repli (dernier message, non-lus) si le WS est coupé.
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _rtSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final convs = await context.read<ChatRepository>().listConversations();
+      if (!mounted) return;
+      setState(() {
+        _convs = convs;
+        _error = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
+  }
+
+  Future<void> _poll() async {
+    if (!mounted) return;
+    try {
+      final convs = await context.read<ChatRepository>().listConversations();
+      if (mounted) setState(() => _convs = convs);
+    } catch (_) {
+      // silencieux
+    }
+  }
+
+  Future<void> _refresh() => _load();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthController>().user;
+    return MotifBackground(
+      overlayOpacity: 0.92,
+      child: Column(
+        children: [
+          if (user != null)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.sand),
+              ),
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: AppColors.terracotta,
+                    child: Icon(Icons.person, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(user.pseudo ?? "Moi",
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text("Numéro Alanya : ${user.publicNumber}",
+                            style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: _buildList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildList() {
+    if (_convs == null && !_error) {
+      return const Center(child: CircularProgressIndicator(color: AppColors.terracotta));
+    }
+    if (_error) {
+      return ListView(children: const [
+        SizedBox(height: 80),
+        Center(child: Text("Erreur de chargement. Tire pour réessayer.")),
+      ]);
+    }
+    final convs = _convs ?? [];
+    if (convs.isEmpty) {
+      return ListView(children: const [
+        SizedBox(height: 100),
+        Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              "Aucune discussion.\nAppuie sur le bouton vert pour en démarrer une via un numéro Alanya.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black54),
+            ),
+          ),
+        ),
+      ]);
+    }
+    return ListView.separated(
+      itemCount: convs.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (_, i) => _tile(convs[i]),
+    );
+  }
+
+  Widget _tile(Conversation c) {
+    final last = c.lastMessage;
+    final preview = last == null
+        ? "—"
+        : (last.type == "AUDIO"
+            ? "🎤 Message vocal"
+            : last.type == "IMAGE"
+                ? "🖼️ Image"
+                : last.type == "FILE"
+                    ? "📎 Fichier"
+                    : (last.content ?? "[${last.type}]"));
+    final title = c.title ?? "Discussion";
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: c.isGroup ? AppColors.forest : AppColors.clay,
+        child: c.isGroup
+            ? const Icon(Icons.groups, color: Colors.white, size: 22)
+            : Text(title.isNotEmpty ? title[0].toUpperCase() : "?",
+                style: const TextStyle(color: Colors.white)),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(
+        c.isGroup && c.members.isNotEmpty
+            ? "${c.members.length} membres · $preview"
+            : preview,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: c.unread > 0
+          ? CircleAvatar(
+              radius: 11,
+              backgroundColor: AppColors.forest,
+              child: Text("${c.unread}",
+                  style: const TextStyle(color: Colors.white, fontSize: 12)),
+            )
+          : null,
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              convId: c.id,
+              title: title,
+              isGroup: c.isGroup,
+              memberNames: c.memberNames,
+            ),
+          ),
+        );
+        _refresh();
+      },
+    );
+  }
+}
+
+class _StatusTab extends StatefulWidget {
+  const _StatusTab();
+
+  @override
+  State<_StatusTab> createState() => _StatusTabState();
+}
+
+class _StatusTabState extends State<_StatusTab> {
+  StatusFeed? _feed;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final feed = await context.read<StatusRepository>().feed();
+      if (!mounted) return;
+      setState(() {
+        _feed = feed;
+        _error = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
+  }
+
+  Future<void> _openCreate() async {
+    final published = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const CreateStatusScreen()),
+    );
+    if (published == true) _load();
+  }
+
+  Future<void> _openViewer(StatusGroup group, {required bool isMine}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => StatusViewerScreen(group: group, isMine: isMine)),
+    );
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final me = _feed?.me;
+    final others = _feed?.others ?? [];
+    return MotifBackground(
+      overlayOpacity: 0.92,
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          children: [
+            _myStatusTile(me),
+            if (_error)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: Text("Erreur de chargement. Tire pour réessayer.")),
+              ),
+            if (others.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text("Récents",
+                    style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+              ),
+              ...others.map((g) => _statusTile(g, isMine: false)),
+            ] else if (!_error && _feed != null && me == null)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(
+                  child: Text(
+                    "Aucun statut pour le moment.\nPublie le tien avec le bouton +.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _myStatusTile(StatusGroup? me) {
+    final has = me != null && me.statuses.isNotEmpty;
+    return ListTile(
+      leading: Stack(
+        children: [
+          CircleAvatar(
+            radius: 26,
+            backgroundColor: AppColors.terracotta,
+            child: const Icon(Icons.person, color: Colors.white),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: CircleAvatar(
+              radius: 9,
+              backgroundColor: AppColors.forest,
+              child: const Icon(Icons.add, color: Colors.white, size: 12),
+            ),
+          ),
+        ],
+      ),
+      title: const Text("Mon statut", style: TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(has ? "${me!.statuses.length} statut(s) · appuie pour voir" : "Appuie pour ajouter"),
+      onTap: has ? () => _openViewer(me!, isMine: true) : _openCreate,
+      trailing: IconButton(
+        icon: const Icon(Icons.add_circle, color: AppColors.forest),
+        onPressed: _openCreate,
+      ),
+    );
+  }
+
+  Widget _statusTile(StatusGroup g, {required bool isMine}) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: g.hasUnviewed ? AppColors.forest : AppColors.sand,
+            width: 2.5,
+          ),
+        ),
+        child: CircleAvatar(
+          radius: 24,
+          backgroundColor: AppColors.clay,
+          child: Text(g.displayName[0].toUpperCase(),
+              style: const TextStyle(color: Colors.white)),
+        ),
+      ),
+      title: Text(g.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(g.hasUnviewed ? "Nouveau" : "Vu"),
+      onTap: () => _openViewer(g, isMine: isMine),
+    );
+  }
+}
+
+class _AiTab extends StatefulWidget {
+  const _AiTab();
+
+  @override
+  State<_AiTab> createState() => _AiTabState();
+}
+
+class _AiTabState extends State<_AiTab> {
+  final _inputCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+  List<AiMessage> _messages = [];
+  bool _loading = true;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _inputCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final msgs = await context.read<AiRepository>().history();
+      if (!mounted) return;
+      setState(() {
+        _messages = msgs;
+        _loading = false;
+      });
+      _scrollToBottom();
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _send() async {
+    final text = _inputCtrl.text.trim();
+    if (text.isEmpty || _sending) return;
+    final repo = context.read<AiRepository>();
+    final mine = AiMessage(
+      id: "local-${DateTime.now().microsecondsSinceEpoch}",
+      role: "USER",
+      content: text,
+      createdAt: DateTime.now(),
+    );
+    setState(() {
+      _messages = [..._messages, mine];
+      _sending = true;
+    });
+    _inputCtrl.clear();
+    _scrollToBottom();
+    try {
+      final reply = await repo.send(text);
+      if (!mounted) return;
+      setState(() => _messages = [..._messages, reply]);
+      _scrollToBottom();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("L'assistant n'a pas répondu")));
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollCtrl.hasClients) {
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MotifBackground(
+      overlayOpacity: 0.9,
+      child: Column(
+        children: [
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.terracotta))
+                : (_messages.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.auto_awesome, size: 56, color: AppColors.clay),
+                              SizedBox(height: 12),
+                              Text("Assistant Alanya",
+                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                              SizedBox(height: 6),
+                              Text("Pose-moi une question pour commencer.",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.black54)),
+                            ],
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollCtrl,
+                        padding: const EdgeInsets.all(12),
+                        itemCount: _messages.length + (_sending ? 1 : 0),
+                        itemBuilder: (_, i) {
+                          if (_sending && i == _messages.length) {
+                            return _bubble("…", false, typing: true);
+                          }
+                          final m = _messages[i];
+                          return _bubble(m.content, m.isUser);
+                        },
+                      )),
+          ),
+          _composer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _bubble(String text, bool mine, {bool typing = false}) {
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        constraints: const BoxConstraints(maxWidth: 300),
+        decoration: BoxDecoration(
+          color: mine ? AppColors.terracotta : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: mine ? null : Border.all(color: AppColors.sand),
+        ),
+        child: typing
+            ? const Text("L'assistant écrit…",
+                style: TextStyle(color: Colors.black54, fontStyle: FontStyle.italic))
+            : Text(text, style: TextStyle(color: mine ? Colors.white : AppColors.ink)),
+      ),
+    );
+  }
+
+  Widget _composer() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        color: AppColors.cream,
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _inputCtrl,
+                minLines: 1,
+                maxLines: 4,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _send(),
+                decoration: const InputDecoration(
+                  hintText: "Demande quelque chose à l'IA…",
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            CircleAvatar(
+              backgroundColor: AppColors.forest,
+              child: IconButton(
+                icon: const Icon(Icons.send, color: Colors.white),
+                onPressed: _sending ? null : _send,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Placeholder extends StatelessWidget {
+  const _Placeholder({required this.icon, required this.label, required this.soon});
+  final IconData icon;
+  final String label;
+  final String soon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 64, color: AppColors.clay),
+          const SizedBox(height: 12),
+          Text(label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text("$soon — bientôt", style: const TextStyle(color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+}

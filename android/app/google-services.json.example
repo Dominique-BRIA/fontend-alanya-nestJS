@@ -1,0 +1,22 @@
+{
+  "_comment": "Copie ce fichier en google-services.json depuis la console Firebase (Paramètres du projet > Tes applications > Android).",
+  "project_info": {
+    "project_number": "123456789012",
+    "project_id": "ton-projet-firebase",
+    "storage_bucket": "ton-projet-firebase.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123456789012:android:abcdef",
+        "android_client_info": {
+          "package_name": "com.example.alanya"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [{ "current_key": "AIzaSy..." }],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    }
+  ],
+  "configuration_version": "1"
+}

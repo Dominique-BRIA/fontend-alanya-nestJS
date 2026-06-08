@@ -1,0 +1,56 @@
+name: alanya
+description: "Alanya — application de messagerie instantanée."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # Réseau / API
+  http: ^1.2.2
+  http_parser: ^4.0.2
+  # Stockage sécurisé des tokens JWT
+  # v10 : corrige le build natif Linux (json.hpp) avec les clang récents.
+  flutter_secure_storage: ^10.3.1
+  # Gestion d'état
+  provider: ^6.1.2
+  # Temps réel (messagerie) — client WebSocket pur Dart (web + desktop)
+  web_socket_channel: ^3.0.1
+  # Sélection de fichiers (images) pour l'envoi de médias
+  file_picker: ^8.1.6
+  # Mobile : enregistrement vocal, lecture audio, téléchargement
+  record: ^7.0.0
+  audioplayers: ^6.1.0
+  path_provider: ^2.1.5
+  url_launcher: ^6.3.1
+  # Appels audio/vidéo WebRTC
+  flutter_webrtc: ^0.12.12
+  permission_handler: ^11.3.1
+  # Champ de saisie du code OTP à 6 chiffres
+  pin_code_fields: ^8.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+
+# Icône Android / iOS — source : assets/images/app_icon.png
+# Génération : bash ../scripts/setup-app-icon.sh
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/app_icon.png
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: assets/images/app_icon.png
+  min_sdk_android: 21
+  remove_alpha_ios: true

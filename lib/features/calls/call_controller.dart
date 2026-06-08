@@ -1,0 +1,319 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+
+import '../../core/call_permissions.dart';
+import '../../core/realtime_client.dart';
+import '../../models/call_record.dart';
+import 'calls_repository.dart';
+import 'webrtc_group_mesh.dart';
+import 'webrtc_peer_session.dart';
+
+enum ActiveCallRole { outgoing, incoming, ongoing }
+
+/// Appels directs et de groupe — mesh WebRTC (une connexion par participant).
+class CallController extends ChangeNotifier {
+  CallController(this._calls, this._rt) {
+    _sub = _rt.events.listen(_onEvent);
+  }
+
+  final CallsRepository _calls;
+  final RealtimeClient _rt;
+  StreamSubscription<Map<String, dynamic>>? _sub;
+  Timer? _ringTimeout;
+
+  String? myUserId;
+  String? myDisplayName;
+
+  IncomingCallInfo? incoming;
+  String? activeCallId;
+  String? activeConvId;
+  String? activePeerName;
+  String activeType = "AUDIO";
+  ActiveCallRole? activeRole;
+  bool isGroupCall = false;
+  bool isCallInitiator = false;
+  final Map<String, String> participantNames = {};
+  final Set<String> joinedParticipantIds = {};
+
+  WebrtcGroupMesh? _mesh;
+  final Map<String, Map<String, List<Map<String, dynamic>>>> _signalBuffer = {};
+  List<Map<String, dynamic>>? _iceServers;
+  String? lastError;
+
+  MediaStream? get localStream => _mesh?.localStream;
+  Map<String, MediaStream> get remoteStreams => _mesh?.remoteStreams ?? {};
+  int get connectedPeerCount => _mesh?.connectedCount ?? 0;
+  bool get mediaConnected => connectedPeerCount > 0;
+  bool get isBusy => activeCallId != null || incoming != null;
+
+  void bindUser(String userId, String displayName) {
+    myUserId = userId;
+    myDisplayName = displayName;
+  }
+
+  Future<void> startOutgoing(String convId, String type, String title) async {
+    if (isBusy) {
+      lastError = "Termine l'appel en cours avant d'en lancer un autre";
+      notifyListeners();
+      throw StateError("BUSY");
+    }
+    lastError = null;
+    final started = await _calls.start(convId, type);
+    _rt.callRing(started.id);
+    activeCallId = started.id;
+    activeConvId = convId;
+    isGroupCall = started.isGroup;
+    isCallInitiator = true;
+    activePeerName = started.isGroup ? (started.groupName ?? title) : title;
+    activeType = type;
+    activeRole = ActiveCallRole.outgoing;
+    participantNames.clear();
+    joinedParticipantIds.clear();
+    if (myUserId != null) joinedParticipantIds.add(myUserId!);
+    for (final c in started.callees) {
+      participantNames[c.userId] = c.pseudo ?? c.publicNumber ?? "Membre";
+    }
+    _ringTimeout?.cancel();
+    _ringTimeout = Timer(const Duration(seconds: 60), () {
+      if (activeRole == ActiveCallRole.outgoing && activeCallId != null) {
+        hangUp();
+      }
+    });
+    notifyListeners();
+  }
+
+  Future<void> acceptIncoming() async {
+    final inc = incoming;
+    if (inc == null || myUserId == null) return;
+
+    final result = await _calls.accept(inc.callId);
+    isGroupCall = result.isGroup || inc.isGroup;
+    isCallInitiator = false;
+    activeCallId = inc.callId;
+    activeConvId = inc.convId;
+    activePeerName = inc.displayTitle;
+    activeType = inc.callType;
+    activeRole = ActiveCallRole.ongoing;
+    incoming = null;
+
+    _rt.callState(
+      inc.callId,
+      "joined",
+      userId: myUserId,
+      displayName: myDisplayName,
+    );
+
+    for (final p in result.activeParticipants) {
+      participantNames[p.userId] = p.displayName;
+      joinedParticipantIds.add(p.userId);
+    }
+    joinedParticipantIds.add(myUserId!);
+    notifyListeners();
+
+    await _ensureMesh();
+    for (final p in result.activeParticipants) {
+      if (p.userId != myUserId) {
+        await _mesh?.connectToPeer(p.userId);
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> rejectIncoming() async {
+    final inc = incoming;
+    if (inc == null) return;
+    await _calls.reject(inc.callId);
+    _rt.callState(
+      inc.callId,
+      inc.isGroup ? "declined" : "rejected",
+      userId: myUserId,
+      displayName: myDisplayName,
+    );
+    _signalBuffer.remove(inc.callId);
+    incoming = null;
+    notifyListeners();
+  }
+
+  Future<void> hangUp() async {
+    final id = activeCallId ?? incoming?.callId;
+    try {
+      if (id != null) {
+        if (isGroupCall && !isCallInitiator && activeRole == ActiveCallRole.ongoing) {
+          await _calls.leave(id);
+          _rt.callState(id, "left", userId: myUserId, displayName: myDisplayName);
+        } else {
+          await _calls.end(id);
+          _rt.callState(id, "ended", userId: myUserId, displayName: myDisplayName);
+        }
+      }
+    } catch (_) {
+    } finally {
+      await _stopMesh();
+      _clear();
+    }
+  }
+
+  void _clear() {
+    _ringTimeout?.cancel();
+    _ringTimeout = null;
+    incoming = null;
+    activeCallId = null;
+    activeConvId = null;
+    activePeerName = null;
+    activeRole = null;
+    isGroupCall = false;
+    isCallInitiator = false;
+    participantNames.clear();
+    joinedParticipantIds.clear();
+    notifyListeners();
+  }
+
+  Future<void> _ensureMesh() async {
+    if (myUserId == null || activeCallId == null) return;
+
+    final isVideo = activeType == "VIDEO";
+    final perms = await ensureCallPermissions(video: isVideo);
+    if (!perms) {
+      lastError = isVideo
+          ? "Micro et caméra requis pour l'appel"
+          : "Micro requis pour l'appel";
+      notifyListeners();
+      return;
+    }
+    lastError = null;
+
+    List<Map<String, dynamic>> ice;
+    try {
+      ice = await _loadIceServers();
+    } catch (_) {
+      ice = WebrtcPeerSession.fallbackIce;
+    }
+
+    if (_mesh != null) return;
+
+    final callId = activeCallId!;
+    _mesh = WebrtcGroupMesh(
+      myUserId: myUserId!,
+      isVideo: isVideo,
+      iceServers: ice,
+      onSendSignal: (peerId, sig) => _rt.callSignal(callId, peerId, sig),
+      onUpdated: notifyListeners,
+    );
+    try {
+      await _mesh!.ensureLocal();
+      notifyListeners();
+    } catch (e) {
+      lastError = "Connexion WebRTC impossible";
+      debugPrint("[webrtc] mesh: $e");
+      notifyListeners();
+    }
+  }
+
+  Future<void> _onPeerJoined(String userId, String? displayName) async {
+    if (userId == myUserId || userId.isEmpty) return;
+    if (displayName != null && displayName.isNotEmpty) {
+      participantNames[userId] = displayName;
+    }
+    joinedParticipantIds.add(userId);
+    if (activeRole == ActiveCallRole.outgoing) {
+      activeRole = ActiveCallRole.ongoing;
+    }
+    notifyListeners();
+    await _ensureMesh();
+    await _mesh?.connectToPeer(userId);
+    notifyListeners();
+  }
+
+  Future<void> _onPeerLeft(String userId) async {
+    joinedParticipantIds.remove(userId);
+    await _mesh?.removePeer(userId);
+    notifyListeners();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadIceServers() async {
+    _iceServers ??= await _calls.iceServers();
+    return _iceServers!;
+  }
+
+  Future<void> _stopMesh() async {
+    await _mesh?.close();
+    _mesh = null;
+  }
+
+  void _bufferSignal(String callId, String from, Map<String, dynamic> signal) {
+    _signalBuffer.putIfAbsent(callId, () => {})[from] ??= [];
+    _signalBuffer[callId]![from]!.add(signal);
+  }
+
+  void _onEvent(Map<String, dynamic> e) {
+    final type = e["type"];
+    if (type == "incoming_call") {
+      final callId = e["callId"] as String;
+      incoming = IncomingCallInfo(
+        callId: callId,
+        convId: e["convId"] as String?,
+        callType: e["callType"] as String? ?? "AUDIO",
+        callerId: e["callerId"] as String,
+        callerName: e["callerName"] as String? ?? "Appel",
+        isGroup: (e["isGroup"] as bool?) ?? false,
+        groupName: e["groupName"] as String?,
+        memberCount: (e["memberCount"] as num?)?.toInt() ?? 2,
+      );
+      notifyListeners();
+    } else if (type == "call_signal") {
+      final callId = e["callId"] as String?;
+      final from = e["from"] as String?;
+      final signal = e["signal"];
+      if (callId == null || from == null || signal is! Map<String, dynamic>) return;
+      if (callId != activeCallId) {
+        _bufferSignal(callId, from, signal);
+        return;
+      }
+      if (_mesh != null) {
+        _mesh!.handleSignal(from, signal);
+      } else {
+        _bufferSignal(callId, from, signal);
+      }
+    } else if (type == "call_state") {
+      final state = e["state"] as String?;
+      final callId = e["callId"] as String?;
+      final userId = e["userId"] as String? ?? e["from"] as String?;
+      final displayName = e["displayName"] as String?;
+
+      if (callId == null) return;
+
+      if (state == "joined" || state == "accepted") {
+        if (callId == activeCallId || callId == incoming?.callId) {
+          _onPeerJoined(userId ?? "", displayName);
+          final buffered = _signalBuffer.remove(callId);
+          if (buffered != null && _mesh != null) {
+            for (final entry in buffered.entries) {
+              for (final sig in entry.value) {
+                _mesh!.handleSignal(entry.key, sig);
+              }
+            }
+          }
+        }
+      } else if (state == "left" || state == "declined") {
+        if (callId == activeCallId && userId != null) {
+          _onPeerLeft(userId);
+        }
+      } else if (state == "rejected" || state == "ended") {
+        if (callId == activeCallId || callId == incoming?.callId) {
+          _stopMesh();
+          _signalBuffer.remove(callId);
+          _clear();
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _stopMesh();
+    super.dispose();
+  }
+}
