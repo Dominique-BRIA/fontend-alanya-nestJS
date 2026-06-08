@@ -19,8 +19,7 @@ android {
         targetSdk = 36 
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-    }
-    
+    }    
 
     buildTypes {
         release {
@@ -39,12 +38,12 @@ flutter {
     source = "../.."
 }
 
+// Version compatible Kotlin DSL (.kts) pour forcer le SDK 36 sur les dépendances
 subprojects {
     afterEvaluate {
-        if (hasProperty("android")) {
-            extensions.byName("android").apply {
-                val androidExtension = this as com.android.build.gradle.BaseExtension
-                androidExtension.compileSdkVersion(36)
+        if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
+            configure<com.android.build.gradle.BaseExtension> {
+                compileSdkVersion(36)
             }
         }
     }
