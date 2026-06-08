@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.alanya"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 34 // <-- Modifié ici (on force le SDK 34)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -20,9 +20,9 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 34 // <-- Modifié ici (on force la cible à 34)
         versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionName = flutterVersionName
     }
 
     buildTypes {
