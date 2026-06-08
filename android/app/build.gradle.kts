@@ -38,3 +38,14 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+subprojects {
+    afterEvaluate {
+        if (hasProperty("android")) {
+            extensions.byName("android").apply {
+                val androidExtension = this as com.android.build.gradle.BaseExtension
+                androidExtension.compileSdkVersion(36)
+            }
+        }
+    }
+}
