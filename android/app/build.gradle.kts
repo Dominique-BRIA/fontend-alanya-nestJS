@@ -37,14 +37,3 @@ kotlin {
 flutter {
     source = "../.."
 }
-
-// Version compatible Kotlin DSL (.kts) pour forcer le SDK 36 sur les dépendances
-subprojects {
-    afterEvaluate {
-        if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
-            configure<com.android.build.gradle.BaseExtension> {
-                compileSdkVersion(36)
-            }
-        }
-    }
-}
