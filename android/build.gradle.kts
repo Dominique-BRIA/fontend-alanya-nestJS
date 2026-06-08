@@ -1,7 +1,7 @@
 allprojects {
     repositories {
         google()
-        mainCentral()
+        mavenCentral() 
     }
 }
 
@@ -16,7 +16,6 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
-// On applique les configurations après l'évaluation de chaque sous-projet
 subprojects {
     afterEvaluate {
         if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
