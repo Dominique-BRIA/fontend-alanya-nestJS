@@ -1,0 +1,19 @@
+workflows:
+  android-build:
+    name: Build Android APK
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      groups:
+        - google_credentials # Optionnel : si tu as des clés pour Firebase ou Play Store
+    scripts:
+      - name: Get dependencies
+        script: |
+          flutter pub get
+      - name: Build APK
+        script: |
+          flutter build apk --release \
+            --dart-define=API_URL=https://backend-alanya.vercel.app \
+            --dart-define=WS_URL=wss://alanya-ws.onrender.com
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
