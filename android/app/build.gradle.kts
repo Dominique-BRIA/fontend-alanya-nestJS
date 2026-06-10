@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.alanya"
-    compileSdk = flutter.compileSdkVersion
+    compileSdkVersion 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
