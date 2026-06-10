@@ -4,13 +4,32 @@ workflows:
     max_build_duration: 60
 
     environment:
-      flutter: 3.24.5   # Version stable fixe — évite les surprises des mises à jour auto
+      flutter: 3.24.5   # Version stable fixe
       java: 17
 
     scripts:
       - name: Get dependencies
         script: |
           flutter pub get
+
+      - name: Patch Plugins SDK Overrides
+        script: |
+          echo "=== Modification des plugins dans le pub cache ==="
+          
+          # Force compileSdkVersion 36 dans les fichiers build.gradle (Groovy) des plugins tiers
+          find $PUB_CACHE -name "build.gradle" -exec sed -i '' 's/compileSdkVersion .*/compileSdkVersion 36/g' {} + 2>/dev/null || \
+          find $PUB_CACHE -name "build.gradle" -exec sed -i 's/compileSdkVersion .*/compileSdkVersion 36/g' {} +
+          
+          # Force compileSdk/compileSdkVersion dans les fichiers build.gradle.kts (Kotlin) des plugins tiers
+          find $PUB_CACHE -name "build.gradle.kts" -exec sed -i '' 's/compileSdk = .*/compileSdk = 36/g' {} + 2>/dev/null || \
+          find $PUB_CACHE -name "build.gradle.kts" -exec sed -i 's/compileSdk = .*/compileSdk = 36/g' {} +
+          find $PUB_CACHE -name "build.gradle.kts" -exec sed -i '' 's/compileSdkVersion = .*/compileSdkVersion = 36/g' {} + 2>/dev/null || \
+          find $PUB_CACHE -name "build.gradle.kts" -exec sed -i 's/compileSdkVersion = .*/compileSdkVersion = 36/g' {} +
+
+          echo "=== Vérification et alignement de l'application principale ==="
+          # S'assure que ton app-même utilise bien compileSdk = 36
+          sed -i '' 's/compileSdk = .*/compileSdk = 36/g' android/app/build.gradle.kts 2>/dev/null || \
+          sed -i 's/compileSdk = .*/compileSdk = 36/g' android/app/build.gradle.kts
 
       - name: Build APK release
         script: |
@@ -19,14 +38,12 @@ workflows:
             --dart-define=WS_URL=wss://alanya-ws.onrender.com
 
     artifacts:
-      # Utiliser l'astérisque (*) garantit que Codemagic attrapera l'APK, 
-      # peu importe s'il s'appelle app-release.apk ou app.apk
       - build/app/outputs/flutter-apk/*.apk
 
     publishing:
       email:
         recipients:
-          - d.bria00@gmail.com   # N'oublie pas de remplacer par ton vrai email !
+          - d.bria00@gmail.com # Mets ton adresse email ici !
         notify:
           success: true
           failure: true
