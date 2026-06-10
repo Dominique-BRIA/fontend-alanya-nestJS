@@ -18,15 +18,16 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// CORRECTION DEFINITIVE : Force le SDK de manière sécurisée via les extensions de projet
+// FORCE LE SDK VIA LA CONFIGURATION DYNAMIQUE DES PLUGINS
 subprojects {
-    project.extensions.findByType<com.android.build.gradle.BaseExtension>()?.apply {
-        compileSdkVersion(36)
+    project.plugins.withId("com.android.library") {
+        project.extensions.getByType<com.android.build.gradle.LibraryExtension>().apply {
+            compileSdk = 36
+        }
     }
-    // Couverture pour les plugins utilisant le nouveau format d'extension découplé
-    project.extensions.findByName("android")?.let { androidExtension ->
-        if (androidExtension is com.android.build.gradle.BaseExtension) {
-            androidExtension.compileSdkVersion(36)
+    project.plugins.withId("com.android.application") {
+        project.extensions.getByType<com.android.build.gradle.AppExtension>().apply {
+            compileSdk = 36
         }
     }
 }
