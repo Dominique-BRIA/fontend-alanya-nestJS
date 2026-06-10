@@ -12,6 +12,7 @@ import '../../chat/screens/chat_screen.dart';
 import '../contacts_repository.dart';
 import 'add_contact_screen.dart';
 import 'new_chat_screen.dart';
+import 'phone_sync_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -22,7 +23,8 @@ class ContactsScreen extends StatefulWidget {
 
 class _ContactsScreenState extends State<ContactsScreen> {
   List<Contact>? _contacts;
-  bool _error = false;
+  bool _loading = false;
+  String? _errorMsg;
 
   @override
   void initState() {
@@ -31,15 +33,31 @@ class _ContactsScreenState extends State<ContactsScreen> {
   }
 
   Future<void> _load() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _errorMsg = null;
+    });
     try {
       final list = await context.read<ContactsRepository>().list();
       if (!mounted) return;
       setState(() {
         _contacts = list;
-        _error = false;
+        _loading = false;
+        _errorMsg = null;
       });
-    } catch (_) {
-      if (mounted) setState(() => _error = true);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errorMsg = "Erreur ${e.statusCode} : ${e.message}";
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errorMsg = "Impossible de charger les contacts.\nVérifie ta connexion.";
+      });
     }
   }
 
@@ -104,6 +122,17 @@ class _ContactsScreenState extends State<ContactsScreen> {
         context,
         "Contacts",
         actions: [
+          // Synchronisation depuis le répertoire téléphonique
+          IconButton(
+            tooltip: "Importer depuis le téléphone",
+            icon: const Icon(Icons.contacts_outlined),
+            onPressed: () async {
+              final added = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(builder: (_) => const PhoneSyncScreen()),
+              );
+              if (added == true) _load();
+            },
+          ),
           IconButton(
             tooltip: "Nouvelle discussion",
             icon: const Icon(Icons.chat_outlined),
@@ -113,6 +142,12 @@ class _ContactsScreenState extends State<ContactsScreen> {
               );
               _load();
             },
+          ),
+          // Bouton actualiser toujours visible
+          IconButton(
+            tooltip: "Actualiser",
+            icon: const Icon(Icons.refresh),
+            onPressed: _loading ? null : _load,
           ),
         ],
       ),
@@ -130,35 +165,104 @@ class _ContactsScreenState extends State<ContactsScreen> {
   }
 
   Widget _body() {
-    if (_contacts == null && !_error) {
+    // Chargement initial
+    if (_contacts == null && _loading) {
       return const Center(child: CircularProgressIndicator(color: AppColors.terracotta));
     }
-    if (_error) {
-      return ListView(children: const [
-        SizedBox(height: 80),
-        Center(child: Text("Erreur de chargement. Tire pour réessayer.")),
-      ]);
-    }
-    final contacts = _contacts ?? [];
-    if (contacts.isEmpty) {
-      return ListView(children: const [
-        SizedBox(height: 100),
-        Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              "Aucun contact.\nAjoute quelqu'un via son numéro Alanya à 6 chiffres.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black54),
+
+    // Erreur avec bouton retry
+    if (_errorMsg != null) {
+      return ListView(
+        children: [
+          const SizedBox(height: 80),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  const Icon(Icons.cloud_off, size: 48, color: Colors.black26),
+                  const SizedBox(height: 12),
+                  Text(
+                    _errorMsg!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _load,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text("Réessayer"),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.terracotta),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ]);
+        ],
+      );
     }
-    return ListView.separated(
-      itemCount: contacts.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) => _tile(contacts[i]),
+
+    final contacts = _contacts ?? [];
+    if (contacts.isEmpty) {
+      return ListView(
+        children: [
+          const SizedBox(height: 80),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  const Icon(Icons.people_outline, size: 64, color: Colors.black12),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Aucun contact pour l'instant.",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Appuie sur + pour chercher un utilisateur\npar son numéro Alanya à 6 chiffres.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: _openAddContact,
+                    icon: const Icon(Icons.person_add),
+                    label: const Text("Ajouter manuellement"),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.forest),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final added = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(builder: (_) => const PhoneSyncScreen()),
+                      );
+                      if (added == true) _load();
+                    },
+                    icon: const Icon(Icons.contacts_outlined),
+                    label: const Text("Importer depuis mon téléphone"),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Stack(
+      children: [
+        ListView.separated(
+          itemCount: contacts.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (_, i) => _tile(contacts[i]),
+        ),
+        if (_loading)
+          const Positioned(
+            top: 0, left: 0, right: 0,
+            child: LinearProgressIndicator(color: AppColors.terracotta),
+          ),
+      ],
     );
   }
 
@@ -166,8 +270,10 @@ class _ContactsScreenState extends State<ContactsScreen> {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: c.isBlocked ? Colors.grey : AppColors.clay,
-        child: Text(c.displayName.isNotEmpty ? c.displayName[0].toUpperCase() : "?",
-            style: const TextStyle(color: Colors.white)),
+        child: Text(
+          c.displayName.isNotEmpty ? c.displayName[0].toUpperCase() : "?",
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
       title: Text(c.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text("Numéro : ${c.publicNumber}${c.isBlocked ? " · bloqué" : ""}"),
@@ -179,7 +285,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
           if (v == "delete") _remove(c);
         },
         itemBuilder: (_) => [
-          if (!c.isBlocked) const PopupMenuItem(value: "chat", child: Text("Discuter")),
+          if (!c.isBlocked)
+            const PopupMenuItem(value: "chat", child: Text("Discuter")),
           PopupMenuItem(value: "block", child: Text(c.isBlocked ? "Débloquer" : "Bloquer")),
           const PopupMenuItem(value: "delete", child: Text("Supprimer")),
         ],

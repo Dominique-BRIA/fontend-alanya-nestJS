@@ -89,15 +89,25 @@ class ApiClient {
       };
 
   Map<String, dynamic> _decode(http.Response res) {
-    final Map<String, dynamic> data =
-        res.body.isEmpty ? {} : jsonDecode(res.body) as Map<String, dynamic>;
+    Map<String, dynamic> data = {};
+    try {
+      if (res.body.isNotEmpty) {
+        data = jsonDecode(res.body) as Map<String, dynamic>;
+      }
+    } catch (_) {
+      // body non-JSON (ex. HTML d'erreur Vercel)
+      if (res.statusCode >= 400) {
+        throw ApiException(res.statusCode, "Erreur serveur ${res.statusCode}");
+      }
+    }
     if (res.statusCode >= 400) {
+      // Format backend : { error: { message, code } }
       final err = data["error"] as Map<String, dynamic>?;
-      throw ApiException(
-        res.statusCode,
-        (err?["message"] as String?) ?? "Erreur ${res.statusCode}",
-        err?["code"] as String?,
-      );
+      final msg = (err?["message"] as String?)
+          ?? (data["message"] as String?)
+          ?? "Erreur ${res.statusCode}";
+      final code = err?["code"] as String?;
+      throw ApiException(res.statusCode, msg, code);
     }
     return data;
   }

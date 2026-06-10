@@ -74,8 +74,11 @@ class WebrtcPeerSession {
     final pc = _pc;
     if (pc == null) return;
     final offer = await pc.createOffer({
-      "offerToReceiveAudio": true,
-      "offerToReceiveVideo": isVideo,
+      "mandatory": {
+        "OfferToReceiveAudio": true,
+        "OfferToReceiveVideo": isVideo,
+      },
+      "optional": [],
     });
     await pc.setLocalDescription(offer);
     onSendSignal({"kind": "offer", "sdp": offer.sdp, "type": offer.type});

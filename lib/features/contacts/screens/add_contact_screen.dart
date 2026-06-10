@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api_client.dart';
@@ -34,8 +35,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
   Future<void> _search() async {
     final number = _numberCtrl.text.trim();
-    if (number.length != 6) {
-      setState(() => _error = "Entre un numéro à 6 chiffres");
+    final isValid = number.length == 6 && RegExp(r'^\d{6}$').hasMatch(number);
+    if (!isValid) {
+      setState(() => _error = "Entre un numéro Alanya valide (6 chiffres)");
       return;
     }
     setState(() {
@@ -48,9 +50,13 @@ class _AddContactScreenState extends State<AddContactScreen> {
       if (!mounted) return;
       setState(() => _result = res);
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (!mounted) return;
+      setState(() => _error = e.statusCode == 404
+          ? "Aucun utilisateur avec ce numéro Alanya"
+          : "Erreur ${e.statusCode} : ${e.message}");
     } catch (_) {
-      setState(() => _error = "Recherche impossible");
+      if (!mounted) return;
+      setState(() => _error = "Recherche impossible. Vérifie ta connexion.");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -61,7 +67,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       showAppSnackBar("${user.pseudo ?? user.publicNumber} est déjà dans tes contacts");
       return;
     }
-    setState(() => _loading = true);
+    setState(() { _loading = true; _error = null; });
     try {
       final alias = _aliasCtrl.text.trim();
       await context.read<ContactsRepository>().add(
@@ -69,12 +75,16 @@ class _AddContactScreenState extends State<AddContactScreen> {
             alias: alias.isEmpty ? null : alias,
           );
       if (!mounted) return;
-      showAppSnackBar("Contact ajouté");
-      Navigator.of(context).pop(true);
+      showAppSnackBar("Contact ajouté ✓");
+      Navigator.of(context).pop(true); // signale que la liste doit se recharger
     } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
       showAppSnackBar(e.message);
-    } catch (_) {
-      showAppSnackBar("Impossible d'ajouter ce contact");
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = "Impossible d'ajouter ce contact. Vérifie ta connexion.");
+      showAppSnackBar("Erreur inattendue");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -134,6 +144,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                       controller: _numberCtrl,
                       keyboardType: TextInputType.number,
                       maxLength: 6,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: const InputDecoration(
                         labelText: "Numéro (6 chiffres)",
                         counterText: "",

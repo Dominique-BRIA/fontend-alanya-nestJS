@@ -82,6 +82,10 @@ class CallController extends ChangeNotifier {
       }
     });
     notifyListeners();
+    // Initialise le stream local immédiatement pour que l'appelant soit prêt
+    // à envoyer de l'audio/vidéo dès que le destinataire accepte.
+    await _ensureMesh();
+    notifyListeners();
   }
 
   Future<void> acceptIncoming() async {
@@ -184,6 +188,9 @@ class CallController extends ChangeNotifier {
     }
     lastError = null;
 
+    // Si le mesh existe déjà et le stream local est prêt, ne rien faire.
+    if (_mesh != null && _mesh!.localStream != null) return;
+
     List<Map<String, dynamic>> ice;
     try {
       ice = await _loadIceServers();
@@ -191,22 +198,27 @@ class CallController extends ChangeNotifier {
       ice = WebrtcPeerSession.fallbackIce;
     }
 
-    if (_mesh != null) return;
+    // Réinitialise si la mesh précédente était en erreur
+    if (_mesh == null) {
+      final callId = activeCallId!;
+      _mesh = WebrtcGroupMesh(
+        myUserId: myUserId!,
+        isVideo: isVideo,
+        iceServers: ice,
+        onSendSignal: (peerId, sig) => _rt.callSignal(callId, peerId, sig),
+        onUpdated: notifyListeners,
+      );
+    }
 
-    final callId = activeCallId!;
-    _mesh = WebrtcGroupMesh(
-      myUserId: myUserId!,
-      isVideo: isVideo,
-      iceServers: ice,
-      onSendSignal: (peerId, sig) => _rt.callSignal(callId, peerId, sig),
-      onUpdated: notifyListeners,
-    );
     try {
       await _mesh!.ensureLocal();
       notifyListeners();
     } catch (e) {
-      lastError = "Connexion WebRTC impossible";
-      debugPrint("[webrtc] mesh: $e");
+      lastError = "Connexion WebRTC impossible : micro/caméra inaccessible";
+      debugPrint("[webrtc] mesh ensureLocal: $e");
+      // Nettoie la mesh cassée pour permettre une nouvelle tentative
+      await _mesh?.close();
+      _mesh = null;
       notifyListeners();
     }
   }
@@ -279,28 +291,36 @@ class CallController extends ChangeNotifier {
     } else if (type == "call_state") {
       final state = e["state"] as String?;
       final callId = e["callId"] as String?;
-      final userId = e["userId"] as String? ?? e["from"] as String?;
+      final fromUserId = e["from"] as String?;
+      final userId = e["userId"] as String? ?? fromUserId;
       final displayName = e["displayName"] as String?;
 
       if (callId == null) return;
 
       if (state == "joined" || state == "accepted") {
+        // Ignore l'écho de notre propre "joined" (le serveur nous le renvoie maintenant)
+        if (userId == myUserId) return;
         if (callId == activeCallId || callId == incoming?.callId) {
           _onPeerJoined(userId ?? "", displayName);
-          final buffered = _signalBuffer.remove(callId);
-          if (buffered != null && _mesh != null) {
-            for (final entry in buffered.entries) {
-              for (final sig in entry.value) {
-                _mesh!.handleSignal(entry.key, sig);
+          // Flushe les signaux bufferisés pour ce callId
+          final bufferedForCall = _signalBuffer.remove(callId);
+          if (bufferedForCall != null && _mesh != null) {
+            for (final peerEntry in bufferedForCall.entries) {
+              for (final sig in peerEntry.value) {
+                _mesh!.handleSignal(peerEntry.key, sig);
               }
             }
           }
         }
       } else if (state == "left" || state == "declined") {
+        // Ignore notre propre départ (on le gère en local dans hangUp)
+        if (userId == myUserId) return;
         if (callId == activeCallId && userId != null) {
           _onPeerLeft(userId);
         }
       } else if (state == "rejected" || state == "ended") {
+        // "ended" émis par nous-mêmes via hangUp — on ignore l'écho
+        if (fromUserId == myUserId) return;
         if (callId == activeCallId || callId == incoming?.callId) {
           _stopMesh();
           _signalBuffer.remove(callId);

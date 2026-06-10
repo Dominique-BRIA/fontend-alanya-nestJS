@@ -12,5 +12,14 @@ Future<bool> ensureCallPermissions({required bool video}) async {
     final cam = await Permission.camera.request();
     if (!cam.isGranted) return false;
   }
+
+  // Bluetooth requis pour les écouteurs sans fil sur Android 12+ (API 31+)
+  // Ne bloque pas l'appel si refusé (périphérique optionnel).
+  try {
+    await Permission.bluetoothConnect.request();
+  } catch (_) {
+    // Permission non disponible sur cette version Android, on ignore.
+  }
+
   return true;
 }
