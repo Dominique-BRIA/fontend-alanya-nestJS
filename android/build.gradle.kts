@@ -18,10 +18,10 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// Force compileSdk 36 sur tous les plugins (file_picker, audioplayers, etc.)
+// CORRECTION : Force compileSdk 36 de manière réactive sans utiliser afterEvaluate
 subprojects {
-    afterEvaluate {
-        extensions.findByType<com.android.build.gradle.BaseExtension>()?.apply {
+    plugins.withType<com.android.build.gradle.BasePlugin> {
+        extensions.configure<com.android.build.gradle.BaseExtension> {
             compileSdkVersion(36)
         }
     }
