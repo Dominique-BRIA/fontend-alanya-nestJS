@@ -18,10 +18,16 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// CORRECTION FINALE : Injection précoce de la version du SDK avant la lecture par AGP
+// CORRECTION DEFINITIVE : Force le SDK de manière sécurisée via les extensions de projet
 subprojects {
-    beforeEvaluate {
-        setProperty("android.compileSdkVersion", 36)
+    project.extensions.findByType<com.android.build.gradle.BaseExtension>()?.apply {
+        compileSdkVersion(36)
+    }
+    // Couverture pour les plugins utilisant le nouveau format d'extension découplé
+    project.extensions.findByName("android")?.let { androidExtension ->
+        if (androidExtension is com.android.build.gradle.BaseExtension) {
+            androidExtension.compileSdkVersion(36)
+        }
     }
 }
 
