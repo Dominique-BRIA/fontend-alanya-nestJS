@@ -18,12 +18,10 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// CORRECTION : Force compileSdk 36 de manière réactive sans utiliser afterEvaluate
+// CORRECTION FINALE : Injection précoce de la version du SDK avant la lecture par AGP
 subprojects {
-    plugins.withType<com.android.build.gradle.BasePlugin> {
-        extensions.configure<com.android.build.gradle.BaseExtension> {
-            compileSdkVersion(36)
-        }
+    beforeEvaluate {
+        setProperty("android.compileSdkVersion", 36)
     }
 }
 
