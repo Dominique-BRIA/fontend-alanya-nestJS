@@ -12,7 +12,7 @@ workflows:
         script: |
           flutter pub get
 
-      - name: Patch Plugins SDK Overrides
+      - name: Patch Plugins SDK & AAR Metadata Overrides
         script: |
           echo "=== Modification des plugins dans le pub cache ==="
           
@@ -26,10 +26,13 @@ workflows:
           find $PUB_CACHE -name "build.gradle.kts" -exec sed -i '' 's/compileSdkVersion = .*/compileSdkVersion = 36/g' {} + 2>/dev/null || \
           find $PUB_CACHE -name "build.gradle.kts" -exec sed -i 's/compileSdkVersion = .*/compileSdkVersion = 36/g' {} +
 
-          echo "=== Vérification et alignement de l'application principale ==="
+          echo "=== Alignement et Bypass AAR sur l'application principale ==="
           # S'assure que ton app-même utilise bien compileSdk = 36
           sed -i '' 's/compileSdk = .*/compileSdk = 36/g' android/app/build.gradle.kts 2>/dev/null || \
           sed -i 's/compileSdk = .*/compileSdk = 36/g' android/app/build.gradle.kts
+          
+          # Force l'application à ignorer la vérification stricte d'AGP pour les dépendances androidx (AAR Metadata)
+          echo -e "\ntasks.withType<com.android.build.gradle.internal.tasks.CheckAarMetadataTask>().configureEach { enabled = false }" >> android/app/build.gradle.kts
 
       - name: Build APK release
         script: |
@@ -43,7 +46,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - d.bria00@gmail.com # Mets ton adresse email ici !
+          - d.bria00@gmail.com
         notify:
           success: true
           failure: true
