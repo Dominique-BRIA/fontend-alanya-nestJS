@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:flutter_contacts/flutter_contacts.dart' as fc;
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../models/contact.dart';
@@ -53,9 +53,9 @@ class PhoneSyncService {
 
     // 2. Lecture des contacts
     onProgress?.call("Lecture du répertoire…");
-    List<Contact> phoneContacts;
+    List<fc.Contact> phoneContacts;
     try {
-      phoneContacts = await FlutterContacts.getContacts(
+      phoneContacts = await fc.FlutterContacts.getContacts(
         withProperties: true, // charge les numéros de téléphone
         withPhoto: false,
       );

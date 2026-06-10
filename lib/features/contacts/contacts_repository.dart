@@ -1,4 +1,5 @@
 import '../../core/api_client.dart';
+import '../../core/authed_api.dart';
 import '../../models/contact.dart';
 
 class ContactsRepository {

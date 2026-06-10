@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart' show openAppSettings;
 import 'package:provider/provider.dart';
 
 import '../../../core/api_client.dart';
