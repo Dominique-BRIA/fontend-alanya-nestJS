@@ -18,20 +18,6 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// FORCE LE SDK VIA LA CONFIGURATION DYNAMIQUE DES PLUGINS
-subprojects {
-    project.plugins.withId("com.android.library") {
-        project.extensions.getByType<com.android.build.gradle.LibraryExtension>().apply {
-            compileSdk = 36
-        }
-    }
-    project.plugins.withId("com.android.application") {
-        project.extensions.getByType<com.android.build.gradle.AppExtension>().apply {
-            compileSdk = 36
-        }
-    }
-}
-
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
