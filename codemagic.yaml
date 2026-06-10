@@ -19,12 +19,14 @@ workflows:
             --dart-define=WS_URL=wss://alanya-ws.onrender.com
 
     artifacts:
-      - build/app/outputs/flutter-apk/app-release.apk
+      # Utiliser l'astérisque (*) garantit que Codemagic attrapera l'APK, 
+      # peu importe s'il s'appelle app-release.apk ou app.apk
+      - build/app/outputs/flutter-apk/*.apk
 
     publishing:
       email:
         recipients:
-          - ton.email@gmail.com   # Remplace par ton email pour recevoir l'APK
+          - d.bria00@gmail.com   # N'oublie pas de remplacer par ton vrai email !
         notify:
           success: true
           failure: true
