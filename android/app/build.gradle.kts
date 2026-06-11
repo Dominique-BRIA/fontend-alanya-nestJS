@@ -5,9 +5,8 @@ plugins {
 }
 
 android {
-    compileSdk = 36
-    ndkVersion = "28.2.13676358"
     namespace = "com.example.alanya"
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -15,7 +14,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // Syntaxe correcte AGP 8.x — pas de kotlinOptions{} qui est déprécié en AGP 9
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
