@@ -264,7 +264,7 @@ class CallController extends ChangeNotifier {
     _signalBuffer[callId]![from]!.add(signal);
   }
 
-  void _onEvent(Map<String, dynamic> e) {
+  Future<void> _onEvent(Map<String, dynamic> e) async {
     final type = e["type"];
     if (type == "incoming_call") {
       final callId = e["callId"] as String;
