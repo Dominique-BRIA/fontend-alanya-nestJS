@@ -60,6 +60,9 @@ class WebrtcPeerSession {
 
   static const fallbackIce = [
     {"urls": "stun:stun.l.google.com:19302"},
+    {"urls": "stun:stun1.l.google.com:19302"},
+    {"urls": "stun:stun2.l.google.com:19302"},
+    {"urls": "stun:stun.cloudflare.com:3478"},
   ];
 
   Future<void> handleSignal(Map<String, dynamic> signal) async {

@@ -142,9 +142,14 @@ class CallController extends ChangeNotifier {
 
   Future<void> hangUp() async {
     final id = activeCallId ?? incoming?.callId;
+    // Neutralise immédiatement pour bloquer les échos entrants pendant le nettoyage
+    final wasGroup = isGroupCall;
+    final wasInitiator = isCallInitiator;
+    final wasRole = activeRole;
+    activeCallId = null; // bloque _onEvent de traiter des états pendant le nettoyage
     try {
       if (id != null) {
-        if (isGroupCall && !isCallInitiator && activeRole == ActiveCallRole.ongoing) {
+        if (wasGroup && !wasInitiator && wasRole == ActiveCallRole.ongoing) {
           await _calls.leave(id);
           _rt.callState(id, "left", userId: myUserId, displayName: myDisplayName);
         } else {
@@ -320,9 +325,14 @@ class CallController extends ChangeNotifier {
         }
       } else if (state == "rejected" || state == "ended") {
         // "ended" émis par nous-mêmes via hangUp — on ignore l'écho
+        // On vérifie sur l'ID sauvegardé car hangUp met activeCallId à null en premier
         if (fromUserId == myUserId) return;
-        if (callId == activeCallId || callId == incoming?.callId) {
-          _stopMesh();
+        final isOurCall = callId == activeCallId ||
+            callId == incoming?.callId ||
+            // cas où hangUp a déjà mis activeCallId à null mais l'écho arrive quand même
+            (activeCallId == null && activeRole != null);
+        if (isOurCall) {
+          await _stopMesh();
           _signalBuffer.remove(callId);
           _clear();
         }
