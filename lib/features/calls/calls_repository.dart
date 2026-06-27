@@ -103,8 +103,41 @@ class CallsRepository {
   }
 
   Future<List<Map<String, dynamic>>> iceServers() async {
-    final data = await _api.get("/api/calls/ice");
-    final list = (data["iceServers"] as List?) ?? [];
-    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    try {
+      final data = await _api.get("/api/calls/ice");
+      final list = (data["iceServers"] as List?) ?? [];
+      
+      final safeServers = <Map<String, dynamic>>[];
+      for (final e in list) {
+        final map = Map<String, dynamic>.from(e as Map);
+        
+        // flutter_webrtc est très capricieux sur les clés "url" / "urls"
+        // et peut crasher nativement (C++/Java) s'il y a des paramètres complexes
+        String? targetUrl;
+        if (map.containsKey('urls')) {
+          final urls = map['urls'];
+          targetUrl = urls is List ? urls.first.toString() : urls.toString();
+        } else if (map.containsKey('url')) {
+          targetUrl = map['url'].toString();
+        }
+        
+        if (targetUrl != null) {
+          // Retire les query params comme ?transport=tcp qui font parfois crasher le plugin natif
+          if (targetUrl.contains('?')) {
+            targetUrl = targetUrl.split('?').first;
+          }
+          
+          safeServers.add({
+            'url': targetUrl,
+            'urls': [targetUrl], // On met les deux pour maximiser la compatibilité selon la plateforme
+            if (map.containsKey('username')) 'username': map['username'],
+            if (map.containsKey('credential')) 'credential': map['credential'],
+          });
+        }
+      }
+      return safeServers.isNotEmpty ? safeServers : WebrtcPeerSession.fallbackIce;
+    } catch (e) {
+      return WebrtcPeerSession.fallbackIce;
+    }
   }
 }
