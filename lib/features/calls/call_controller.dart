@@ -46,7 +46,10 @@ class CallController extends ChangeNotifier {
   Map<String, MediaStream> get remoteStreams => _mesh?.remoteStreams ?? {};
   int get connectedPeerCount => _mesh?.connectedCount ?? 0;
   bool get mediaConnected => connectedPeerCount > 0;
-  bool get isBusy => activeCallId != null || incoming != null;
+
+  /// FIX: activeRole est inclus pour éviter que isBusy == false
+  /// pendant la transition incoming → activeCallId dans acceptIncoming().
+  bool get isBusy => activeCallId != null || incoming != null || activeRole != null;
 
   void bindUser(String userId, String displayName) {
     myUserId = userId;
@@ -95,12 +98,12 @@ class CallController extends ChangeNotifier {
     final result = await _calls.accept(inc.callId);
     isGroupCall = result.isGroup || inc.isGroup;
     isCallInitiator = false;
-    activeCallId = inc.callId;
+    activeCallId = inc.callId;   // activeCallId défini AVANT incoming = null
     activeConvId = inc.convId;
     activePeerName = inc.displayTitle;
     activeType = inc.callType;
     activeRole = ActiveCallRole.ongoing;
-    incoming = null;
+    incoming = null;             // incoming mis à null APRÈS
 
     _rt.callState(
       inc.callId,
@@ -325,11 +328,9 @@ class CallController extends ChangeNotifier {
         }
       } else if (state == "rejected" || state == "ended") {
         // "ended" émis par nous-mêmes via hangUp — on ignore l'écho
-        // On vérifie sur l'ID sauvegardé car hangUp met activeCallId à null en premier
         if (fromUserId == myUserId) return;
         final isOurCall = callId == activeCallId ||
             callId == incoming?.callId ||
-            // cas où hangUp a déjà mis activeCallId à null mais l'écho arrive quand même
             (activeCallId == null && activeRole != null);
         if (isOurCall) {
           await _stopMesh();
