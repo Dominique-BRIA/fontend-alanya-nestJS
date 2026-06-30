@@ -90,7 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 20),
               TextField(
                 controller: _pseudoCtrl,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: "Pseudo",
                   prefixIcon: Icon(Icons.person),
                 ),
@@ -99,7 +99,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               TextField(
                 controller: _statusCtrl,
                 maxLength: 255,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: "Statut (humeur, dispo…)",
                   prefixIcon: Icon(Icons.info_outline),
                 ),
