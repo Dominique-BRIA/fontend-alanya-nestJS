@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:provider/provider.dart';
-import '../../../l10n/app_localizations.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_snackbar.dart';
@@ -25,7 +24,7 @@ class _OtpScreenState extends State<OtpScreen> {
 
   Future<void> _verify() async {
     if (_code.length != 6) {
-      showAppSnackBar(tr(context, 'enter_6_digits'));
+      showAppSnackBar("Entre les 6 chiffres du code.");
       return;
     }
     setState(() => _loading = true);
@@ -43,7 +42,7 @@ class _OtpScreenState extends State<OtpScreen> {
     } on ApiException catch (e) {
       showAppSnackBar(e.message);
     } catch (_) {
-      showAppSnackBar(tr(context, 'server_unreachable'));
+      showAppSnackBar("Impossible de contacter le serveur.");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -52,7 +51,7 @@ class _OtpScreenState extends State<OtpScreen> {
   Future<void> _resend() async {
     try {
       await context.read<AuthRepository>().register(widget.email);
-      showAppSnackBar(tr(context, 'new_code_sent'));
+      showAppSnackBar("Nouveau code envoyé.");
     } on ApiException catch (e) {
       showAppSnackBar(e.message);
     }
@@ -61,7 +60,7 @@ class _OtpScreenState extends State<OtpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: backAppBar(context, tr(context, 'confirmation')),
+      appBar: backAppBar(context, "Confirmation"),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -70,7 +69,7 @@ class _OtpScreenState extends State<OtpScreen> {
             children: [
               const SizedBox(height: 8),
               const Text(
-                tr(context, 'enter_code'),
+                "Entre le code reçu",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -118,11 +117,11 @@ class _OtpScreenState extends State<OtpScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : Text(tr(context, 'verify')),
+                    : const Text("Vérifier"),
               ),
               TextButton(
                 onPressed: _loading ? null : _resend,
-                child: Text(tr(context, 'resend_code')),
+                child: const Text("Renvoyer le code"),
               ),
             ],
           ),

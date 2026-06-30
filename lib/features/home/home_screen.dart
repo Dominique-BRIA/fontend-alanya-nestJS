@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../l10n/app_localizations.dart';
 
 import '../../core/realtime_client.dart';
 import '../../models/ai_message.dart';
@@ -130,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
           title: const Text("Alanya"),
           actions: [
             IconButton(
-              tooltip: tr(context, 'contacts'),
+              tooltip: "Contacts",
               icon: const Icon(Icons.people_alt_outlined),
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ContactsScreen()),
@@ -164,10 +163,10 @@ class _HomeScreenState extends State<HomeScreen> {
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
-          destinations: [
-            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: tr(context, 'chats')),
-            NavigationDestination(icon: Icon(Icons.donut_large), label: tr(context, 'status')),
-            NavigationDestination(icon: Icon(Icons.call_outlined), label: tr(context, 'calls')),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: "Discussions"),
+            NavigationDestination(icon: Icon(Icons.donut_large), label: "Statuts"),
+            NavigationDestination(icon: Icon(Icons.call_outlined), label: "Appels"),
             NavigationDestination(icon: Icon(Icons.auto_awesome), label: "IA"),
           ],
         ),

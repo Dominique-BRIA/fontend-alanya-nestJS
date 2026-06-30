@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../l10n/app_localizations.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_snackbar.dart';
@@ -50,7 +49,7 @@ class _SetupScreenState extends State<SetupScreen> {
     } on ApiException catch (e) {
       showAppSnackBar(e.message);
     } catch (_) {
-      showAppSnackBar(tr(context, 'server_unreachable'));
+      showAppSnackBar("Impossible de contacter le serveur.");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -59,7 +58,7 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: backAppBar(context, tr(context, 'profile_setup')),
+      appBar: backAppBar(context, "Ton profil"),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -79,7 +78,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   child: Column(
                     children: [
                       const Text(
-                        tr(context, 'alanya_number'),
+                        "Ton numéro Alanya",
                         style: TextStyle(color: AppColors.chocolate),
                       ),
                       const SizedBox(height: 6),
@@ -94,7 +93,7 @@ class _SetupScreenState extends State<SetupScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        tr(context, 'alanya_number_help'),
+                        "C'est avec ce numéro que tes contacts te trouveront.",
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
@@ -104,8 +103,8 @@ class _SetupScreenState extends State<SetupScreen> {
                 const SizedBox(height: 24),
                 TextFormField(
                   controller: _pseudoCtrl,
-                  decoration: InputDecoration(
-                    labelText: tr(context, 'pseudo'),
+                  decoration: const InputDecoration(
+                    labelText: "Pseudo",
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (v) =>
@@ -116,7 +115,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   controller: _passwordCtrl,
                   obscureText: _obscure,
                   decoration: InputDecoration(
-                    labelText: tr(context, 'password'),
+                    labelText: "Mot de passe",
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
@@ -124,7 +123,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                   ),
                   validator: (v) =>
-                      (v ?? "").length < 8 ? tr(context, 'password_min_8') : null,
+                      (v ?? "").length < 8 ? "8 caractères minimum" : null,
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -138,7 +137,7 @@ class _SetupScreenState extends State<SetupScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(tr(context, 'finish')),
+                      : const Text("Terminer"),
                 ),
               ],
             ),

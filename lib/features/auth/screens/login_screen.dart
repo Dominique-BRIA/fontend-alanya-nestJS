@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../l10n/app_localizations.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_snackbar.dart';
@@ -45,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (e) {
       showAppSnackBar(e.message);
     } catch (_) {
-      showAppSnackBar(tr(context, 'server_unreachable'));
+      showAppSnackBar("Impossible de contacter le serveur.");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -54,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: backAppBar(context, tr(context, 'login')),
+      appBar: backAppBar(context, "Connexion"),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -65,32 +64,32 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const SizedBox(height: 8),
                 const Text(
-                  tr(context, 'login_welcome'),
+                  "Content de te revoir 👋",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 24),
                 TextFormField(
                   controller: _idCtrl,
-                  decoration: InputDecoration(
-                    labelText: tr(context, 'email_or_alanya'),
+                  decoration: const InputDecoration(
+                    labelText: "Email ou numéro Alanya (6 chiffres)",
                     prefixIcon: Icon(Icons.alternate_email),
                   ),
                   validator: (v) =>
-                      (v ?? "").trim().isEmpty ? tr(context, 'email_required') : null,
+                      (v ?? "").trim().isEmpty ? "Identifiant requis" : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordCtrl,
                   obscureText: _obscure,
                   decoration: InputDecoration(
-                    labelText: tr(context, 'password'),
+                    labelText: "Mot de passe",
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
-                  validator: (v) => (v ?? "").isEmpty ? tr(context, 'password') : null,
+                  validator: (v) => (v ?? "").isEmpty ? "Mot de passe requis" : null,
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -104,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(tr(context, 'sign_in')),
+                      : const Text("Se connecter"),
                 ),
               ],
             ),

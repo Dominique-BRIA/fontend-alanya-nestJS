@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../l10n/app_localizations.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_snackbar.dart';
@@ -40,7 +39,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } on ApiException catch (e) {
       showAppSnackBar(e.message);
     } catch (_) {
-      showAppSnackBar(tr(context, 'server_unreachable'));
+      showAppSnackBar("Impossible de contacter le serveur.");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -49,7 +48,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: backAppBar(context, tr(context, 'register')),
+      appBar: backAppBar(context, "Créer un compte"),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -60,12 +59,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 const SizedBox(height: 8),
                 const Text(
-                  tr(context, 'register_question'),
+                  "Quel est ton email ?",
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  tr(context, 'register_hint'),
+                  "Nous t'enverrons un code de confirmation à 6 chiffres.",
                   style: TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 24),
@@ -73,15 +72,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.email],
-                  decoration: InputDecoration(
-                    labelText: tr(context, 'email'),
+                  decoration: const InputDecoration(
+                    labelText: "Email",
                     prefixIcon: Icon(Icons.email_outlined),
                   ),
                   validator: (v) {
                     final value = (v ?? "").trim();
-                    if (value.isEmpty) return tr(context, 'email_required');
+                    if (value.isEmpty) return "Email requis";
                     if (!value.contains("@") || !value.contains(".")) {
-                      return tr(context, 'email_invalid');
+                      return "Email invalide";
                     }
                     return null;
                   },
@@ -98,7 +97,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(tr(context, 'receive_code')),
+                      : const Text("Recevoir le code"),
                 ),
               ],
             ),
