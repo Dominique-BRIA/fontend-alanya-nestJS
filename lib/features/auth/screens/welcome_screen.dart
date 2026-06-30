@@ -14,7 +14,6 @@ class WelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localeCtrl = context.watch<LocaleController>();
-    final isFr = localeCtrl.isFrench;
 
     return Scaffold(
       body: MotifBackground(
@@ -63,28 +62,29 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                   child: Text(tr(context, 'have_account')),
                 ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.language, size: 18, color: Colors.black54),
-                    const SizedBox(width: 10),
-                    ChoiceChip(
-                      label: const Text('FR'),
-                      selected: isFr,
-                      onSelected: (_) => localeCtrl.setLocale('fr'),
+                const SizedBox(height: 16),
+                Text(tr(context, 'language'), style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                const SizedBox(height: 8),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: LocaleController.supported.map((l) {
+                    final selected = localeCtrl.languageCode == l.code;
+                    return ChoiceChip(
+                      label: Text('${l.flag} ${l.code.toUpperCase()}'),
+                      selected: selected,
+                      onSelected: (_) => localeCtrl.setLocale(l.code),
                       selectedColor: AppColors.terracotta.withOpacity(0.2),
-                    ),
-                    const SizedBox(width: 8),
-                    ChoiceChip(
-                      label: const Text('EN'),
-                      selected: !isFr,
-                      onSelected: (_) => localeCtrl.setLocale('en'),
-                      selectedColor: AppColors.terracotta.withOpacity(0.2),
-                    ),
-                  ],
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        color: selected ? AppColors.terracotta : Colors.black87,
+                        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    );
+                  }).toList(),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
               ],
             ),
           ),

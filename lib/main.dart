@@ -76,6 +76,13 @@ class AlanyaApp extends StatelessWidget {
       supportedLocales: const [
         Locale('fr'),
         Locale('en'),
+        Locale('zh'),
+        Locale('es'),
+        Locale('de'),
+        Locale('pt'),
+        Locale('ru'),
+        Locale('sv'),
+        Locale('no'),
       ],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,

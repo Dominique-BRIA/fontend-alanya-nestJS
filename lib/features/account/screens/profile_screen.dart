@@ -92,14 +92,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 8),
                   Text(tr(context, 'language_description'), style: const TextStyle(color: Colors.black54, fontSize: 13)),
                   const SizedBox(height: 12),
-                  SegmentedButton<String>(
-                    segments: [
-                      ButtonSegment(value: 'fr', label: Text(tr(context, 'french')), icon: const Text('🇫🇷')),
-                      ButtonSegment(value: 'en', label: Text(tr(context, 'english')), icon: const Text('🇬🇧')),
-                    ],
-                    selected: {localeCtrl.languageCode},
-                    onSelectionChanged: (s) => localeCtrl.setLocale(s.first),
-                  ),
+                  DropdownButtonFormField<String>(
+                      value: LocaleController.supported.any((l) => l.code == localeCtrl.languageCode) ? localeCtrl.languageCode : 'fr',
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      items: LocaleController.supported.map((l) {
+                        return DropdownMenuItem(
+                          value: l.code,
+                          child: Text('${l.flag}  ${l.nativeName}'),
+                        );
+                      }).toList(),
+                      onChanged: (code) {
+                        if (code != null) localeCtrl.setLocale(code);
+                      },
+                    ),
                 ]),
               ),
               const SizedBox(height: 24),
