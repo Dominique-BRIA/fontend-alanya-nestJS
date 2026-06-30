@@ -5,29 +5,23 @@ import 'package:provider/provider.dart';
 class AppLocalizations {
   final String languageCode;
   AppLocalizations(this.languageCode);
-
   static AppLocalizations of(BuildContext context) {
     final localeCtrl = context.watch<LocaleController>();
     return AppLocalizations(localeCtrl.languageCode);
   }
-
   static AppLocalizations read(BuildContext context) {
     final localeCtrl = context.read<LocaleController>();
     return AppLocalizations(localeCtrl.languageCode);
   }
-
   String get(String key) => _localizedValues[languageCode]?[key] ?? _localizedValues['fr']?[key] ?? key;
-
   static const _localizedValues = <String, Map<String, String>>{
     'fr': {
-      // Welcome
       'app_tagline': 'Discutez, appelez, partagez — en toute simplicité.',
       'create_account': 'Créer un compte',
       'have_account': "J'ai déjà un compte",
       'language': 'Langue',
       'french': 'Français',
       'english': 'English',
-      // Auth
       'login': 'Connexion',
       'login_welcome': 'Content de te revoir 👋',
       'email_or_alanya': 'Email ou numéro Alanya (6 chiffres)',
@@ -54,12 +48,10 @@ class AppLocalizations {
       'password_min_8': '8 caractères minimum',
       'finish': 'Terminer',
       'server_unreachable': 'Impossible de contacter le serveur.',
-      // Home / tabs
       'chats': 'Discussions',
       'status': 'Statuts',
       'calls': 'Appels',
       'contacts': 'Contacts',
-      // Chat
       'write_message': 'Écrire un message…',
       'attach_file': 'Joindre un fichier',
       'recording_hold': 'Enregistrement… relâche pour envoyer',
@@ -71,14 +63,12 @@ class AppLocalizations {
       'micro_unavailable': 'Microphone inaccessible',
       'micro_unavailable_platform': 'Micro non disponible sur cette plateforme — joins un fichier audio via 📎',
       'file_picker_linux': 'Sélection de fichier indisponible sur Linux — installe zenity : sudo apt install zenity',
-      // Translate
       'translate': 'Traduire',
       'translating': 'Traduction…',
       'translation_failed': 'Traduction impossible',
       'translated': 'Traduction',
       'show_original': 'Voir l\'original',
       'original': 'Original',
-      // Profile
       'my_profile': 'Mon profil',
       'alanya_number_label': 'Numéro Alanya : ',
       'status_hint': 'Statut (humeur, dispo…)',
@@ -89,19 +79,16 @@ class AppLocalizations {
       'pseudo_min_2': 'Le pseudo doit faire au moins 2 caractères',
       'language_settings': 'Langue de l’application',
       'language_description': 'Choisis la langue d’affichage pour Alanya.',
-      // Calls
       'audio_call': 'Appel audio',
       'video_call': 'Appel vidéo',
       'end_call': 'Raccrocher',
       'incoming_call': 'Appel entrant…',
       'accept': 'Accepter',
       'decline': 'Refuser',
-      // Contacts
       'new_chat': 'Nouvelle discussion',
       'add_contact': 'Ajouter un contact',
       'search_alanya': 'Recherche par numéro Alanya',
       'contacts_on_alanya': 'Contacts',
-      // Misc
       'cancel': 'Annuler',
       'close': 'Fermer',
       'ok': 'OK',
@@ -110,14 +97,12 @@ class AppLocalizations {
       'error': 'Erreur',
     },
     'en': {
-      // Welcome
       'app_tagline': 'Chat, call, share — simply.',
       'create_account': 'Create an account',
       'have_account': 'I already have an account',
       'language': 'Language',
       'french': 'Français',
       'english': 'English',
-      // Auth
       'login': 'Login',
       'login_welcome': 'Welcome back 👋',
       'email_or_alanya': 'Email or Alanya number (6 digits)',
@@ -144,12 +129,10 @@ class AppLocalizations {
       'password_min_8': '8 characters minimum',
       'finish': 'Finish',
       'server_unreachable': 'Unable to reach the server.',
-      // Home / tabs
       'chats': 'Chats',
       'status': 'Status',
       'calls': 'Calls',
       'contacts': 'Contacts',
-      // Chat
       'write_message': 'Write a message…',
       'attach_file': 'Attach a file',
       'recording_hold': 'Recording… release to send',
@@ -161,14 +144,12 @@ class AppLocalizations {
       'micro_unavailable': 'Microphone unavailable',
       'micro_unavailable_platform': 'Microphone not available on this platform — attach an audio file via 📎',
       'file_picker_linux': 'File picker unavailable on Linux — install zenity: sudo apt install zenity',
-      // Translate
       'translate': 'Translate',
       'translating': 'Translating…',
       'translation_failed': 'Translation failed',
       'translated': 'Translation',
       'show_original': 'Show original',
       'original': 'Original',
-      // Profile
       'my_profile': 'My profile',
       'alanya_number_label': 'Alanya number: ',
       'status_hint': 'Status (mood, availability…)',
@@ -179,19 +160,16 @@ class AppLocalizations {
       'pseudo_min_2': 'Username must be at least 2 characters',
       'language_settings': 'App language',
       'language_description': 'Choose the display language for Alanya.',
-      // Calls
       'audio_call': 'Audio call',
       'video_call': 'Video call',
       'end_call': 'Hang up',
       'incoming_call': 'Incoming call…',
       'accept': 'Accept',
       'decline': 'Decline',
-      // Contacts
       'new_chat': 'New chat',
       'add_contact': 'Add contact',
       'search_alanya': 'Search by Alanya number',
       'contacts_on_alanya': 'Contacts',
-      // Misc
       'cancel': 'Cancel',
       'close': 'Close',
       'ok': 'OK',
@@ -201,15 +179,9 @@ class AppLocalizations {
     },
   };
 }
-
-/// Helper shortcut: tr(context, 'key')
 String tr(BuildContext context, String key, [Map<String, String>? params]) {
   final loc = AppLocalizations.of(context);
   var s = loc.get(key);
-  if (params != null) {
-    params.forEach((k, v) {
-      s = s.replaceAll('{$k}', v);
-    });
-  }
+  if (params != null) { params.forEach((k, v) { s = s.replaceAll('{$k}', v); }); }
   return s;
 }

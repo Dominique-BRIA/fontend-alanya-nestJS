@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../core/locale_controller.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/motif_background.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 
-/// Écran d'accueil : logo Alanya sur fond motif + boutons S'inscrire / Se connecter.
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final localeCtrl = context.watch<LocaleController>();
+    final isFr = localeCtrl.isFrench;
+
     return Scaffold(
       body: MotifBackground(
         child: SafeArea(
@@ -31,17 +36,17 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  "Discutez, appelez, partagez — en toute simplicité.",
+                Text(
+                  tr(context, 'app_tagline'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15, color: AppColors.ink),
+                  style: const TextStyle(fontSize: 15, color: AppColors.ink),
                 ),
                 const Spacer(flex: 3),
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const RegisterScreen()),
                   ),
-                  child: const Text("Créer un compte"),
+                  child: Text(tr(context, 'create_account')),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton(
@@ -56,9 +61,30 @@ class WelcomeScreen extends StatelessWidget {
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
                   ),
-                  child: const Text("J'ai déjà un compte"),
+                  child: Text(tr(context, 'have_account')),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.language, size: 18, color: Colors.black54),
+                    const SizedBox(width: 10),
+                    ChoiceChip(
+                      label: const Text('FR'),
+                      selected: isFr,
+                      onSelected: (_) => localeCtrl.setLocale('fr'),
+                      selectedColor: AppColors.terracotta.withOpacity(0.2),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('EN'),
+                      selected: !isFr,
+                      onSelected: (_) => localeCtrl.setLocale('en'),
+                      selectedColor: AppColors.terracotta.withOpacity(0.2),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),

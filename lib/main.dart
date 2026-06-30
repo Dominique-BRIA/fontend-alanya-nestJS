@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'core/api_client.dart';
 import 'core/authed_api.dart';
+import 'core/locale_controller.dart';
 import 'core/push_service.dart';
 import 'core/realtime_client.dart';
 import 'core/token_storage.dart';
@@ -41,6 +43,9 @@ void main() {
         Provider<MediaRepository>.value(value: MediaRepository(authedApi)),
         Provider<CallsRepository>.value(value: CallsRepository(authedApi)),
         ChangeNotifierProvider<RealtimeClient>.value(value: realtime),
+        ChangeNotifierProvider<LocaleController>(
+          create: (_) => LocaleController()..load(),
+        ),
         ChangeNotifierProvider<CallController>(
           create: (ctx) => CallController(
             ctx.read<CallsRepository>(),
@@ -61,17 +66,27 @@ class AlanyaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localeCtrl = context.watch<LocaleController>();
     return MaterialApp(
       navigatorKey: PushService.navigatorKey,
       title: "Alanya",
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      locale: localeCtrl.locale,
+      supportedLocales: const [
+        Locale('fr'),
+        Locale('en'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const AuthGate(),
     );
   }
 }
 
-/// Aiguille vers l'accueil ou l'écran de bienvenue selon l'état d'authentification.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../l10n/app_localizations.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_snackbar.dart';
@@ -44,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (e) {
       showAppSnackBar(e.message);
     } catch (_) {
-      showAppSnackBar("Impossible de contacter le serveur.");
+      showAppSnackBar(tr(context, 'server_unreachable'));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -53,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: backAppBar(context, "Connexion"),
+      appBar: backAppBar(context, tr(context, 'login')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -63,33 +64,33 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
-                const Text(
-                  "Content de te revoir 👋",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  tr(context, 'login_welcome'),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 24),
                 TextFormField(
                   controller: _idCtrl,
-                  decoration: const InputDecoration(
-                    labelText: "Email ou numéro Alanya (6 chiffres)",
-                    prefixIcon: Icon(Icons.alternate_email),
+                  decoration: InputDecoration(
+                    labelText: tr(context, 'email_or_alanya'),
+                    prefixIcon: const Icon(Icons.alternate_email),
                   ),
                   validator: (v) =>
-                      (v ?? "").trim().isEmpty ? "Identifiant requis" : null,
+                      (v ?? "").trim().isEmpty ? tr(context, 'email_required') : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordCtrl,
                   obscureText: _obscure,
                   decoration: InputDecoration(
-                    labelText: "Mot de passe",
+                    labelText: tr(context, 'password'),
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
-                  validator: (v) => (v ?? "").isEmpty ? "Mot de passe requis" : null,
+                  validator: (v) => (v ?? "").isEmpty ? tr(context, 'password') : null,
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -103,7 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text("Se connecter"),
+                      : Text(tr(context, 'sign_in')),
                 ),
               ],
             ),

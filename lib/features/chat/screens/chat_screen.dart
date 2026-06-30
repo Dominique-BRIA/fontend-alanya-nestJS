@@ -13,6 +13,9 @@ import '../../../core/downloader.dart';
 import '../../../core/realtime_client.dart';
 import '../../../core/token_storage.dart';
 import '../../../core/voice_recorder.dart';
+import '../../../core/locale_controller.dart';
+import '../../../core/translate_service.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../models/message.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/auth_network_image.dart';
@@ -57,6 +60,11 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _recording = false;
   DateTime? _recordStarted;
 
+  // --- Traduction ---
+  final _translateService = TranslateService();
+  final Map<String, String> _translations = {};
+  final Set<String> _translating = {};
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +81,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _pollTimer?.cancel();
     _rtSub?.cancel();
     _voiceRecorder.cancel();
+    _translateService.dispose();
     InlineAudioPlayer.stop();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
@@ -214,7 +223,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
-      _showError("Envoi impossible");
+      _showError(tr(context, 'send_failed'));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -278,7 +287,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
-      _showError("Envoi impossible");
+      _showError(tr(context, 'send_failed'));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -287,12 +296,12 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _startVoiceRecord() async {
     if (_uploading || _recording) return;
     if (!_voiceRecorder.isSupported) {
-      _showError("Micro non disponible sur cette plateforme — joins un fichier audio via 📎");
+      _showError(tr(context, 'micro_unavailable_platform'));
       return;
     }
     final ok = await _voiceRecorder.start();
     if (!ok) {
-      _showError("Microphone inaccessible");
+      _showError(tr(context, 'micro_unavailable'));
       return;
     }
     setState(() {
@@ -455,7 +464,7 @@ class _ChatScreenState extends State<ChatScreen> {
     } on StateError catch (_) {
       _showError("Tu es déjà en appel");
     } catch (_) {
-      _showError("Impossible de démarrer l'appel");
+      _showError(tr(context, 'error'));
     }
   }
 
@@ -487,7 +496,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: AppColors.terracotta))
                   : _messages.isEmpty
-                      ? const Center(child: Text("Aucun message. Dis bonjour 👋"))
+                      ? Center(child: Text(tr(context, 'no_messages')))
                       : ListView.builder(
                           controller: _scrollCtrl,
                           padding: const EdgeInsets.all(12),
@@ -610,7 +619,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _fileBubble(Message m, bool mine) {
     final media = m.media.first;
     final _FileVisual visual = _fileVisual(media);
-    final name = media.filename ?? "Fichier";
+    final name = media.filename ?? tr(context, 'file');
     final ext = _ext(name);
     final size = _humanSize(media.sizeBytes);
     final onText = mine ? Colors.white : AppColors.ink;
@@ -671,7 +680,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         if (size.isNotEmpty) const SizedBox(width: 8),
                         Icon(Icons.download, size: 14, color: onSub),
                         const SizedBox(width: 2),
-                        Text("Télécharger",
+                        Text(tr(context, 'download'),
                             style: TextStyle(fontSize: 11, color: onSub)),
                       ],
                     ),
@@ -728,7 +737,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    secs != null ? "${secs}s" : "Message vocal",
+                    secs != null ? "${secs}s" : tr(context, 'voice_message'),
                     style: TextStyle(fontSize: 12, color: onSub),
                   ),
                 ],
@@ -747,23 +756,119 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Future<void> _translateMessage(Message m) async {
+    final text = (m.content ?? '').trim();
+    if (text.isEmpty) return;
+    final locale = context.read<LocaleController>().languageCode;
+    // Si déjà traduit, on toggle (masquer)
+    if (_translations.containsKey(m.id)) {
+      setState(() => _translations.remove(m.id));
+      return;
+    }
+    if (_translating.contains(m.id)) return;
+    setState(() => _translating.add(m.id));
+    try {
+      // Détection simple : si l'utilisateur est en FR, on traduit vers FR, sinon EN
+      // source = auto
+      final translated = await _translateService.translate(
+        text: text,
+        target: locale,
+        source: 'auto',
+      );
+      if (!mounted) return;
+      setState(() => _translations[m.id] = translated);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr(context, 'translation_failed'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _translating.remove(m.id));
+    }
+  }
+
   Widget _textBubble(Message m, bool mine) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          m.content ?? "[${m.type}]",
-          style: TextStyle(color: mine ? Colors.white : AppColors.ink),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          _time(m.createdAt) + (mine ? (m.status == "READ" ? " ✓✓" : " ✓") : ""),
-          style: TextStyle(
-            fontSize: 10,
-            color: mine ? Colors.white70 : Colors.black45,
+    final translated = _translations[m.id];
+    final isTranslating = _translating.contains(m.id);
+    final onTextColor = mine ? Colors.white : AppColors.ink;
+    final onSubColor = mine ? Colors.white70 : Colors.black45;
+
+    return GestureDetector(
+      onTap: m.type == 'TEXT' && (m.content ?? '').isNotEmpty
+          ? () => _translateMessage(m)
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            m.content ?? "[${m.type}]",
+            style: TextStyle(color: onTextColor),
           ),
-        ),
-      ],
+          if (translated != null) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: mine ? Colors.white.withOpacity(0.15) : AppColors.sand.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.translate, size: 12, color: onSubColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        tr(context, 'translated'),
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: onSubColor),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    translated,
+                    style: TextStyle(fontSize: 13, color: onTextColor, fontStyle: FontStyle.italic),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (isTranslating) ...[
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: onSubColor),
+                ),
+                const SizedBox(width: 6),
+                Text(tr(context, 'translating'), style: TextStyle(fontSize: 10, color: onSubColor)),
+              ],
+            ),
+          ],
+          if (!isTranslating && translated == null && m.type == 'TEXT')
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                tr(context, 'translate'),
+                style: TextStyle(fontSize: 10, color: onSubColor.withOpacity(0.8), fontStyle: FontStyle.italic),
+              ),
+            ),
+          const SizedBox(height: 2),
+          Text(
+            _time(m.createdAt) + (mine ? (m.status == "READ" ? " ✓✓" : " ✓") : ""),
+            style: TextStyle(
+              fontSize: 10,
+              color: onSubColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -788,7 +893,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: [
                   Icon(Icons.fiber_manual_record, color: Colors.red.shade700, size: 14),
                   const SizedBox(width: 8),
-                  const Text("Enregistrement… relâche pour envoyer",
+                  Text(tr(context, 'recording_hold'),
                       style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
                 ],
               ),
@@ -799,7 +904,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Row(
               children: [
                 IconButton(
-                  tooltip: "Joindre un fichier",
+                  tooltip: tr(context, 'attach_file'),
                   icon: _uploading
                       ? const SizedBox(
                           width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
@@ -813,8 +918,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     maxLines: 4,
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
-                    decoration: const InputDecoration(
-                      hintText: "Écrire un message…",
+                    decoration: InputDecoration(
+                      hintText: tr(context, 'write_message'),
                       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     ),
                   ),
