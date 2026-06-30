@@ -164,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
-          destinations: const [
+          destinations: [
             NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: tr(context, 'chats')),
             NavigationDestination(icon: Icon(Icons.donut_large), label: tr(context, 'status')),
             NavigationDestination(icon: Icon(Icons.call_outlined), label: tr(context, 'calls')),
