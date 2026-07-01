@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../core/api_client.dart';
 import '../../models/auth_user.dart';
 
@@ -15,6 +17,13 @@ class AuthSession {
   final String accessToken;
   final String refreshToken;
   AuthSession(this.user, this.accessToken, this.refreshToken);
+}
+
+/// Tokens rafraîchis (sans user – il faut rappeler /api/me après).
+class RefreshSession {
+  final String accessToken;
+  final String refreshToken;
+  RefreshSession(this.accessToken, this.refreshToken);
 }
 
 /// Appelle les endpoints d'authentification du backend.
@@ -61,6 +70,16 @@ class AuthRepository {
   Future<AuthUser> me(String accessToken) async {
     final data = await _api.get("/api/me", bearer: accessToken);
     return AuthUser.fromJson(data);
+  }
+
+  /// Rafraîchit un access token expiré à partir du refresh token.
+  /// Retourne les nouveaux tokens. Ne supprime rien en cas d'échec – c'est à l'appelant.
+  Future<RefreshSession> refresh(String refreshToken) async {
+    final data = await _api.post("/api/auth/refresh", {"refreshToken": refreshToken});
+    return RefreshSession(
+      data["accessToken"] as String,
+      data["refreshToken"] as String,
+    );
   }
 
   Future<void> logout(String refreshToken) async {
