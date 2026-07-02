@@ -27,6 +27,32 @@ class MessageMedia {
       );
 }
 
+/// Snapshot d'un message cité (réponse). Permet d'afficher l'aperçu du message
+/// original côté UI sans dépendre du chargement local de l'historique.
+class ReplyPreview {
+  final String id;
+  final String senderId;
+  final String type;
+  final String? content;
+  final bool isDeleted;
+
+  ReplyPreview({
+    required this.id,
+    required this.senderId,
+    required this.type,
+    this.content,
+    this.isDeleted = false,
+  });
+
+  factory ReplyPreview.fromJson(Map<String, dynamic> j) => ReplyPreview(
+        id: j["id"] as String,
+        senderId: j["senderId"] as String,
+        type: j["type"] as String? ?? "TEXT",
+        content: j["content"] as String?,
+        isDeleted: j["isDeleted"] as bool? ?? false,
+      );
+}
+
 class Message {
   final String id;
   final String convId;
@@ -35,6 +61,7 @@ class Message {
   final String type; // TEXT, IMAGE, FILE, AUDIO, VIDEO
   final String status; // SENT, DELIVERED, READ
   final String? replyToId;
+  final ReplyPreview? replyTo; // snapshot du message cité (venant du backend)
   final DateTime? deletedAt; // non-null = message supprimé pour tous
   final List<MessageMedia> media;
   final DateTime createdAt;
@@ -50,6 +77,7 @@ class Message {
     required this.media,
     required this.createdAt,
     this.deletedAt,
+    this.replyTo,
   });
 
   /// Vrai si le message a été supprimé pour tout le monde.
@@ -63,6 +91,9 @@ class Message {
         type: j["type"] as String,
         status: (j["status"] as String?) ?? "SENT",
         replyToId: j["replyToId"] as String?,
+        replyTo: j["replyTo"] != null
+            ? ReplyPreview.fromJson(j["replyTo"] as Map<String, dynamic>)
+            : null,
         deletedAt: j["deletedAt"] != null ? DateTime.tryParse(j["deletedAt"] as String) : null,
         media: ((j["media"] as List?) ?? [])
             .map((m) => MessageMedia.fromJson(m as Map<String, dynamic>))

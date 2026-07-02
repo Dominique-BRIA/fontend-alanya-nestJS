@@ -68,6 +68,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // --- Réponse à un message (swipe-to-reply) ---
   Message? _replyTo;
+  // Clés globales pour chaque message → permet le scroll-to-message au clic sur une réponse.
+  final Map<String, GlobalKey> _messageKeys = {};
 
   // --- Traduction ---
   final _translateService = TranslateService();
@@ -133,6 +135,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     type: m.type,
                     status: "READ",
                     replyToId: m.replyToId,
+                    replyTo: m.replyTo,
                     deletedAt: m.deletedAt,
                     media: m.media,
                     createdAt: m.createdAt,
@@ -156,6 +159,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     type: m.type,
                     status: newStatus,
                     replyToId: m.replyToId,
+                    replyTo: m.replyTo,
                     deletedAt: m.deletedAt,
                     media: m.media,
                     createdAt: m.createdAt,
@@ -183,6 +187,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       type: m.type,
                       status: m.status,
                       replyToId: m.replyToId,
+                    replyTo: m.replyTo,
                       deletedAt: DateTime.now(),
                       media: const [],
                       createdAt: m.createdAt,
@@ -258,6 +263,17 @@ class _ChatScreenState extends State<ChatScreen> {
     // Voie temps réel : envoi optimiste, réconcilié à l'écho du serveur.
     if (rt.connected) {
       final tempId = "tmp-${DateTime.now().microsecondsSinceEpoch}";
+      // Snapshot du message cité pour affichage immédiat côté expéditeur.
+      final replyMsg = _replyTo;
+      final replySnapshot = replyMsg != null
+          ? ReplyPreview(
+              id: replyMsg.id,
+              senderId: replyMsg.senderId,
+              type: replyMsg.type,
+              content: replyMsg.isDeleted ? null : replyMsg.content,
+              isDeleted: replyMsg.isDeleted,
+            )
+          : null;
       final optimistic = Message(
         id: tempId,
         convId: widget.convId,
@@ -266,6 +282,7 @@ class _ChatScreenState extends State<ChatScreen> {
         type: "TEXT",
         status: "SENT",
         replyToId: replyId,
+        replyTo: replySnapshot,
         media: const [],
         createdAt: DateTime.now(),
       );
@@ -341,7 +358,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  /// Retrouve un message cité dans la liste locale (pour afficher l'aperçu du reply).
+  /// Retrouve un message cité dans la liste locale (pour le scroll-to-message).
   Message? _findMessage(String? id) {
     if (id == null) return null;
     try {
@@ -351,48 +368,106 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Fait défiler la liste vers le message cité (clic sur l'aperçu de réponse).
+  void _scrollToMessage(String id) {
+    final key = _messageKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: 0.4,
+      );
+    }
+  }
+
+  /// Détermine le texte d'aperçu selon le type de message cité.
+  String _replyPreviewText(Message? original, ReplyPreview? snapshot) {
+    if (snapshot != null) {
+      if (snapshot.isDeleted) return tr(context, 'message_deleted');
+      if (snapshot.content != null) return snapshot.content!;
+      return _typeLabel(snapshot.type);
+    }
+    if (original == null) return '...';
+    if (original.isDeleted) return tr(context, 'message_deleted');
+    if (original.content != null) return original.content!;
+    if (original.media.isNotEmpty) {
+      return '📎 ${original.media.first.filename ?? tr(context, 'file')}';
+    }
+    return _typeLabel(original.type);
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'IMAGE':
+        return '📷 ${tr(context, 'photo')}';
+      case 'AUDIO':
+        return '🎙️ ${tr(context, 'voice_message')}';
+      case 'VIDEO':
+        return '🎥 ${tr(context, 'video')}';
+      case 'FILE':
+        return '📎 ${tr(context, 'file')}';
+      default:
+        return '[${type}]';
+    }
+  }
+
+  /// Détermine le nom de l'auteur du message cité.
+  String _replySenderName(Message? original, ReplyPreview? snapshot) {
+    final senderId = snapshot?.senderId ?? original?.senderId;
+    if (senderId == null) return tr(context, 'reply_to');
+    if (senderId == _myId) return tr(context, 'you');
+    return widget.memberNames[senderId] ?? tr(context, 'reply_to');
+  }
+
   /// Construit l'aperçu du message cité (en haut de la bulle, style WhatsApp).
+  /// Utilise le snapshot du backend (m.replyTo) qui contient le contenu du message
+  /// original — fonctionne même si le message n'est plus chargé localement.
+  /// Cliquable : scroll vers le message original si celui-ci est dans la liste.
   Widget _replyPreviewHeader(Message m, bool mine) {
+    // Priorité au snapshot du backend ; repli sur la liste locale.
+    final snapshot = m.replyTo;
     final original = _findMessage(m.replyToId);
-    if (original == null) return const SizedBox.shrink();
+    if (snapshot == null && original == null) return const SizedBox.shrink();
 
     final onColor = mine ? Colors.white : AppColors.ink;
     final barColor = mine ? Colors.white70 : AppColors.terracotta;
-    final previewText = original.isDeleted
-        ? tr(context, 'message_deleted')
-        : (original.content ??
-            (original.media.isNotEmpty ? '📎 ${original.media.first.filename ?? tr(context, 'file')}' : '[${original.type}]'));
+    final previewText = _replyPreviewText(original, snapshot);
+    final senderName = _replySenderName(original, snapshot);
+    final canScroll = original != null;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: mine ? Colors.white.withOpacity(0.15) : AppColors.sand.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border(left: BorderSide(color: barColor, width: 3)),
-      ),
-      constraints: const BoxConstraints(maxWidth: 220),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            original.senderId == _myId
-                ? tr(context, 'you')
-                : (widget.memberNames[original.senderId] ?? tr(context, 'reply_to')),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: barColor,
+    return GestureDetector(
+      onTap: canScroll ? () => _scrollToMessage(m.replyToId!) : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: mine ? Colors.white.withOpacity(0.15) : AppColors.sand.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border(left: BorderSide(color: barColor, width: 3)),
+        ),
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              senderName,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: barColor,
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            previewText,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: onColor.withOpacity(0.8)),
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              previewText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: onColor.withOpacity(0.8)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -684,6 +759,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       type: m.type,
                       status: m.status,
                       replyToId: m.replyToId,
+                    replyTo: m.replyTo,
                       deletedAt: DateTime.now(),
                       media: const [],
                       createdAt: m.createdAt,
@@ -880,6 +956,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ? (widget.memberNames[m.senderId] ?? "Membre")
         : null;
     return Align(
+      key: _messageKeys.putIfAbsent(m.id, () => GlobalKey()),
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
         crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
