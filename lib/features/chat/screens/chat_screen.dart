@@ -59,6 +59,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final _voiceRecorder = VoiceRecorder();
   bool _recording = false;
   DateTime? _recordStarted;
+  bool _recordLocked = false; // vrai quand l'utilisateur a verrouillé (slide up)
+  Duration _recordDuration = Duration.zero; // minuteur en direct
+  Timer? _recordTimer;
+  bool _voiceActive = false; // garde-fou anti-race : true pendant l'appui ET l'enregistrement
 
   // --- Traduction ---
   final _translateService = TranslateService();
@@ -79,6 +83,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _recordTimer?.cancel();
     _rtSub?.cancel();
     _voiceRecorder.cancel();
     _translateService.dispose();
@@ -293,26 +298,62 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _startRecordTimer() {
+    _recordTimer?.cancel();
+    _recordDuration = Duration.zero;
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _recordDuration = DateTime.now().difference(_recordStarted ?? DateTime.now());
+      });
+    });
+  }
+
+  void _stopRecordTimer() {
+    _recordTimer?.cancel();
+    _recordTimer = null;
+  }
+
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _startVoiceRecord() async {
-    if (_uploading || _recording) return;
+    if (_uploading || _recording || _voiceActive) return;
+    _voiceActive = true; // marque le début de l'interaction (garde-fou anti-race)
     if (!_voiceRecorder.isSupported) {
+      _voiceActive = false;
       _showError(tr(context, 'micro_unavailable_platform'));
       return;
     }
     final ok = await _voiceRecorder.start();
-    if (!ok) {
-      _showError(tr(context, 'micro_unavailable'));
+    if (!ok || !_voiceActive) {
+      // L'utilisateur a relâché avant la fin du démarrage, ou permission refusée.
+      if (ok) _voiceRecorder.cancel();
+      _voiceActive = false;
+      if (ok) _showError(tr(context, 'micro_unavailable'));
       return;
     }
+    if (!mounted) return;
     setState(() {
       _recording = true;
+      _recordLocked = false;
       _recordStarted = DateTime.now();
     });
+    _startRecordTimer();
   }
 
   Future<void> _stopVoiceRecord({bool cancel = false}) async {
+    _voiceActive = false; // l'interaction est terminée
     if (!_recording) return;
-    setState(() => _recording = false);
+    _stopRecordTimer();
+    setState(() {
+      _recording = false;
+      _recordLocked = false;
+      _recordDuration = Duration.zero;
+    });
     if (cancel) {
       _voiceRecorder.cancel();
       return;
@@ -907,77 +948,221 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _composer() {
+    // ---- ÉTAT VERROUILLÉ : l'utilisateur a slidé vers le haut ----
+    // L'enregistrement continue sans maintenir le doigt. Boutons envoyer/annuler.
+    if (_recordLocked) {
+      return SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          color: AppColors.cream,
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: () => _stopVoiceRecord(cancel: true),
+                child: CircleAvatar(
+                  backgroundColor: Colors.red.shade400,
+                  child: const Icon(Icons.delete_outline, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.fiber_manual_record,
+                          color: Colors.red, size: 14),
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatDuration(_recordDuration),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red.shade700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const Spacer(),
+                      Icon(Icons.lock, color: Colors.red.shade400, size: 18),
+                      const SizedBox(width: 4),
+                      Text(
+                        tr(context, 'recording_locked'),
+                        style: const TextStyle(fontSize: 13, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _uploading ? null : () => _stopVoiceRecord(),
+                child: CircleAvatar(
+                  backgroundColor: AppColors.terracotta,
+                  child: const Icon(Icons.send, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ---- ÉTAT NORMAL OU ENREGISTREMENT (doigt maintenu) ----
+    // On utilise Offstage pour cacher les boutons 📎 et 📤 pendant l'enregistrement
+    // SANS modifier la structure du Row : le GestureDetector du micro reste ainsi
+    // au MÊME index dans l'arbre, ce qui préserve le geste long-press à travers
+    // le rebuild de setState (sinon onLongPressEnd ne se déclencherait jamais).
     return SafeArea(
       top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_recording)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              color: Colors.red.shade50,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        color: AppColors.cream,
+        child: Row(
+          children: [
+            // Bouton pièce jointe — Offstage préserve la structure du Row
+            Offstage(
+              offstage: _recording,
+              child: IconButton(
+                tooltip: tr(context, 'attach_file'),
+                icon: _uploading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.attach_file, color: AppColors.chocolate),
+                onPressed: _uploading ? null : _pickAndSendFile,
+              ),
+            ),
+            // Champ texte OU barre d'enregistrement (même slot Expanded)
+            Expanded(
+              child: _recording
+                  ? _recordingBar()
+                  : TextField(
+                      controller: _inputCtrl,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: InputDecoration(
+                        hintText: tr(context, 'write_message'),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 4),
+            // Bouton micro — TOUJOURS à cet index (stable pour le gesture)
+            _micButton(),
+            // Bouton envoyer — Offstage préserve la structure du Row
+            Offstage(
+              offstage: _recording,
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.fiber_manual_record, color: Colors.red.shade700, size: 14),
                   const SizedBox(width: 8),
-                  Text(tr(context, 'recording_hold'),
-                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+                  CircleAvatar(
+                    backgroundColor: AppColors.terracotta,
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white),
+                      onPressed: _sending ? null : _send,
+                    ),
+                  ),
                 ],
               ),
             ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            color: AppColors.cream,
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: tr(context, 'attach_file'),
-                  icon: _uploading
-                      ? const SizedBox(
-                          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.attach_file, color: AppColors.chocolate),
-                  onPressed: _uploading || _recording ? null : _pickAndSendFile,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _inputCtrl,
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
-                    decoration: InputDecoration(
-                      hintText: tr(context, 'write_message'),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                GestureDetector(
-                  onLongPressStart: (_) => _startVoiceRecord(),
-                  onLongPressEnd: (_) => _stopVoiceRecord(),
-                  onLongPressCancel: () => _stopVoiceRecord(cancel: true),
-                  child: CircleAvatar(
-                    backgroundColor: _recording ? Colors.red : AppColors.forest,
-                    child: Icon(
-                      _recording ? Icons.mic : Icons.mic_none,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: AppColors.terracotta,
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: _sending || _recording ? null : _send,
-                  ),
-                ),
-              ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Barre d'enregistrement affichée pendant que le doigt est maintenu.
+  Widget _recordingBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+          const SizedBox(width: 8),
+          Text(
+            _formatDuration(_recordDuration),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.red.shade700,
+              fontSize: 15,
             ),
           ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              tr(context, 'slide_up_to_lock'),
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const Icon(Icons.keyboard_arrow_up, color: Colors.black38, size: 20),
+        ],
+      ),
+    );
+  }
+
+  // Bouton micro avec détection de geste long-press + slide-to-lock.
+  // Un Stack superpose une icône de verrouillage au-dessus du micro pendant l'enregistrement.
+  Widget _micButton() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPressStart: (_) => _startVoiceRecord(),
+      onLongPressMoveUpdate: (details) {
+        // Slide vers le haut (> 60 px) → verrouillage.
+        if (details.offsetFromOrigin.dy < -60 && _recording && !_recordLocked) {
+          setState(() => _recordLocked = true);
+        }
+      },
+      onLongPressEnd: (_) {
+        // Relâche sans verrouillage → envoi automatique.
+        if (_recording && !_recordLocked) {
+          _stopVoiceRecord();
+        }
+      },
+      onLongPressCancel: () {
+        if (_recording && !_recordLocked) {
+          _stopVoiceRecord(cancel: true);
+        }
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          CircleAvatar(
+            backgroundColor: _recording ? Colors.red : AppColors.forest,
+            child: Icon(
+              _recording ? Icons.mic : Icons.mic_none,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          // Icône de verrouillage au-dessus du micro pendant l'enregistrement
+          if (_recording)
+            Positioned(
+              top: -30,
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_open, color: Colors.white, size: 14),
+              ),
+            ),
         ],
       ),
     );
