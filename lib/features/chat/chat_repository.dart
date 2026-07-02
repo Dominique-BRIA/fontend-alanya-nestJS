@@ -56,4 +56,17 @@ class ChatRepository {
   Future<void> markRead(String convId) async {
     await _api.post("/api/conversations/$convId/read", {});
   }
+
+  /// Supprime un message : scope "me" (masque pour moi) ou "everyone" (efface pour tous).
+  Future<void> deleteMessage(String convId, String messageId, {String scope = "me"}) async {
+    await _api.delete("/api/conversations/$convId/messages/$messageId?scope=$scope");
+  }
+
+  /// Transfère un message vers une ou plusieurs conversations.
+  Future<void> forwardMessage(String convId, String messageId, List<String> targetConvIds) async {
+    await _api.post("/api/conversations/$convId/messages/forward", {
+      "messageId": messageId,
+      "targetConvIds": targetConvIds,
+    });
+  }
 }

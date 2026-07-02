@@ -35,6 +35,7 @@ class Message {
   final String type; // TEXT, IMAGE, FILE, AUDIO, VIDEO
   final String status; // SENT, DELIVERED, READ
   final String? replyToId;
+  final DateTime? deletedAt; // non-null = message supprimé pour tous
   final List<MessageMedia> media;
   final DateTime createdAt;
 
@@ -48,7 +49,11 @@ class Message {
     required this.replyToId,
     required this.media,
     required this.createdAt,
+    this.deletedAt,
   });
+
+  /// Vrai si le message a été supprimé pour tout le monde.
+  bool get isDeleted => deletedAt != null;
 
   factory Message.fromJson(Map<String, dynamic> j) => Message(
         id: j["id"] as String,
@@ -58,6 +63,7 @@ class Message {
         type: j["type"] as String,
         status: (j["status"] as String?) ?? "SENT",
         replyToId: j["replyToId"] as String?,
+        deletedAt: j["deletedAt"] != null ? DateTime.tryParse(j["deletedAt"] as String) : null,
         media: ((j["media"] as List?) ?? [])
             .map((m) => MessageMedia.fromJson(m as Map<String, dynamic>))
             .toList(),

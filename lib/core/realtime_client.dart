@@ -103,6 +103,12 @@ class RealtimeClient extends ChangeNotifier {
 
   void markRead(String convId) => _send({"type": "read", "convId": convId});
 
+  void deleteMessage(String messageId, {String scope = "me"}) =>
+      _send({"type": "delete_message", "messageId": messageId, "scope": scope});
+
+  void forwardMessage(String messageId, List<String> targetConvIds) =>
+      _send({"type": "forward_message", "messageId": messageId, "targetConvIds": targetConvIds});
+
   void sendTyping(String convId, bool isTyping) =>
       _send({"type": "typing", "convId": convId, "isTyping": isTyping});
 

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api_client.dart';
@@ -17,6 +18,7 @@ import '../../../core/locale_controller.dart';
 import '../../../core/translate_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/message.dart';
+import '../../../models/conversation.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/auth_network_image.dart';
 import '../../../widgets/back_app_bar.dart';
@@ -128,11 +130,40 @@ class _ChatScreenState extends State<ChatScreen> {
                     type: m.type,
                     status: "READ",
                     replyToId: m.replyToId,
+                    deletedAt: m.deletedAt,
                     media: m.media,
                     createdAt: m.createdAt,
                   )
                 : m)
             .toList();
+      });
+    } else if (type == "message_deleted") {
+      final messageId = e["messageId"] as String?;
+      final scope = e["scope"] as String? ?? "me";
+      if (messageId == null || e["convId"] != widget.convId) return;
+      setState(() {
+        if (scope == "me") {
+          // « Pour moi » : retire le message de ma liste.
+          _messages = _messages.where((m) => m.id != messageId).toList();
+        } else {
+          // « Pour tous » : remplace par un placeholder supprimé.
+          _messages = _messages
+              .map((m) => m.id == messageId
+                  ? Message(
+                      id: m.id,
+                      convId: m.convId,
+                      senderId: m.senderId,
+                      content: null,
+                      type: m.type,
+                      status: m.status,
+                      replyToId: m.replyToId,
+                      deletedAt: DateTime.now(),
+                      media: const [],
+                      createdAt: m.createdAt,
+                    )
+                  : m)
+              .toList();
+        }
       });
     }
   }
@@ -491,6 +522,155 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _showError(String m) => showAppSnackBar(m);
 
+  // --- Suppression de message ---
+
+  Future<void> _deleteMessage(Message m) async {
+    final canDeleteForAll = m.senderId == _myId && !m.isDeleted;
+    final scope = await _showDeleteDialog(canDeleteForAll);
+    if (scope == null || !mounted) return;
+
+    final rt = context.read<RealtimeClient>();
+    try {
+      if (rt.connected) {
+        rt.deleteMessage(m.id, scope: scope);
+      } else {
+        await context.read<ChatRepository>().deleteMessage(widget.convId, m.id, scope: scope);
+      }
+      if (!mounted) return;
+      // Mise à jour optimiste de l'UI.
+      setState(() {
+        if (scope == "me") {
+          _messages = _messages.where((msg) => msg.id != m.id).toList();
+        } else {
+          _messages = _messages
+              .map((msg) => msg.id == m.id
+                  ? Message(
+                      id: m.id,
+                      convId: m.convId,
+                      senderId: m.senderId,
+                      content: null,
+                      type: m.type,
+                      status: m.status,
+                      replyToId: m.replyToId,
+                      deletedAt: DateTime.now(),
+                      media: const [],
+                      createdAt: m.createdAt,
+                    )
+                  : msg)
+              .toList();
+        }
+      });
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError(tr(context, 'send_failed'));
+    }
+  }
+
+  /// Affiche le dialogue de choix : « Pour moi » / « Pour tous ». Retourne le scope choisi.
+  Future<String?> _showDeleteDialog(bool canDeleteForAll) {
+    return showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: AppColors.chocolate),
+              title: Text(tr(context, 'delete_for_me')),
+              onTap: () => Navigator.pop(ctx, "me"),
+            ),
+            if (canDeleteForAll)
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                title: Text(tr(context, 'delete_for_everyone')),
+                onTap: () => Navigator.pop(ctx, "everyone"),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- Transfert de message ---
+
+  Future<void> _forwardMessage(Message m) async {
+    final conversations = await context.read<ChatRepository>().listConversations();
+    if (!mounted) return;
+
+    final picked = <String>{};
+    await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _ForwardPicker(
+        conversations: conversations.where((c) => c.id != widget.convId).toList(),
+        title: tr(context, 'forward_to'),
+      ),
+    ).then((result) {
+      if (result != null) picked.addAll(result);
+    });
+
+    if (picked.isEmpty || !mounted) return;
+
+    final rt = context.read<RealtimeClient>();
+    try {
+      if (rt.connected) {
+        rt.forwardMessage(m.id, picked.toList());
+      } else {
+        await context.read<ChatRepository>().forwardMessage(widget.convId, m.id, picked.toList());
+      }
+      if (mounted) showAppSnackBar(tr(context, 'forwarded_success'));
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError(tr(context, 'send_failed'));
+    }
+  }
+
+  /// Affiche le menu contextuel (appui long sur un message).
+  void _showMessageOptions(Message m) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!m.isDeleted) ...[
+              ListTile(
+                leading: const Icon(Icons.forward, color: AppColors.forest),
+                title: Text(tr(context, 'forward')),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _forwardMessage(m);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy, color: AppColors.chocolate),
+                title: Text(tr(context, 'copy')),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (m.content != null) {
+                    Clipboard.setData(ClipboardData(text: m.content!));
+                    showAppSnackBar(tr(context, 'copied'));
+                  }
+                },
+              ),
+            ],
+            ListTile(
+              leading: Icon(m.isDeleted ? Icons.delete_outline : Icons.delete,
+                  color: Colors.red),
+              title: Text(tr(context, 'delete')),
+              onTap: () {
+                Navigator.pop(ctx);
+                _deleteMessage(m);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _startCall(String type) async {
     final cc = context.read<CallController>();
     try {
@@ -576,7 +756,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
-          Container(
+        GestureDetector(
+          onLongPress: () => _showMessageOptions(m),
+          child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         // Image : marge interne fine pour une vignette quasi pleine bulle (style WhatsApp).
         padding: isImage
@@ -588,16 +770,45 @@ class _ChatScreenState extends State<ChatScreen> {
           borderRadius: BorderRadius.circular(14),
           border: mine ? null : Border.all(color: AppColors.sand),
         ),
-        child: isImage
-            ? _imageBubble(m, mine)
-            : isFile
-                ? _fileBubble(m, mine)
-                : isAudio
-                    ? _audioBubble(m, mine)
-                    : _textBubble(m, mine),
+        child: m.isDeleted
+            ? _deletedBubble(m, mine)
+            : isImage
+                ? _imageBubble(m, mine)
+                : isFile
+                    ? _fileBubble(m, mine)
+                    : isAudio
+                        ? _audioBubble(m, mine)
+                        : _textBubble(m, mine),
           ),
+        ),
         ],
       ),
+    );
+  }
+
+  // Placeholder pour un message supprimé pour tous (style WhatsApp).
+  Widget _deletedBubble(Message m, bool mine) {
+    final onSub = mine ? Colors.white70 : Colors.black45;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.block, size: 14, color: onSub),
+            const SizedBox(width: 6),
+            Text(
+              tr(context, 'message_deleted'),
+              style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: onSub),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          _time(m.createdAt),
+          style: TextStyle(fontSize: 10, color: onSub),
+        ),
+      ],
     );
   }
 
@@ -1173,4 +1384,104 @@ class _FileVisual {
   final IconData icon;
   final Color color;
   const _FileVisual(this.icon, this.color);
+}
+
+/// Sélecteur de conversations pour le transfert de message (multi-sélection).
+class _ForwardPicker extends StatefulWidget {
+  const _ForwardPicker({required this.conversations, required this.title});
+  final List<Conversation> conversations;
+  final String title;
+
+  @override
+  State<_ForwardPicker> createState() => _ForwardPickerState();
+}
+
+class _ForwardPickerState extends State<_ForwardPicker> {
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // En-tête
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Text(widget.title,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                TextButton(
+                  onPressed: _selected.isEmpty
+                      ? null
+                      : () => Navigator.pop(context, _selected),
+                  child: Text(
+                    _selected.isEmpty
+                        ? ''
+                        : '${_selected.length}',
+                    style: TextStyle(
+                      color: _selected.isEmpty ? Colors.grey : AppColors.terracotta,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Liste des conversations (hauteur limitée)
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.5,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: widget.conversations.length,
+              itemBuilder: (_, i) {
+                final conv = widget.conversations[i];
+                final isSelected = _selected.contains(conv.id);
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: isSelected ? AppColors.terracotta : AppColors.sand,
+                    child: Icon(
+                      isSelected ? Icons.check : (conv.isGroup ? Icons.group : Icons.person),
+                      color: isSelected ? Colors.white : AppColors.chocolate,
+                    ),
+                  ),
+                  title: Text(conv.title ?? 'Conversation'),
+                  subtitle: conv.isGroup ? const Text('Groupe') : null,
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) {
+                        _selected.remove(conv.id);
+                      } else {
+                        _selected.add(conv.id);
+                      }
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+          // Bouton de validation
+          if (_selected.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.terracotta,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.pop(context, _selected),
+                  icon: const Icon(Icons.send),
+                  label: Text(tr(context, 'send')),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
