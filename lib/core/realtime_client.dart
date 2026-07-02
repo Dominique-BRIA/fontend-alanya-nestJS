@@ -90,15 +90,23 @@ class RealtimeClient extends ChangeNotifier {
     ch.sink.add(jsonEncode(payload));
   }
 
-  void sendMessage(String convId, String content, String tempId) =>
-      _send({"type": "send", "convId": convId, "content": content, "msgType": "TEXT", "tempId": tempId});
+  void sendMessage(String convId, String content, String tempId, {String? replyToId}) =>
+      _send({
+        "type": "send",
+        "convId": convId,
+        "content": content,
+        "msgType": "TEXT",
+        "tempId": tempId,
+        if (replyToId != null) "replyToId": replyToId,
+      });
 
-  void sendMedia(String convId, String mediaId, String msgType, String tempId) => _send({
+  void sendMedia(String convId, String mediaId, String msgType, String tempId, {String? replyToId}) => _send({
         "type": "send",
         "convId": convId,
         "mediaId": mediaId,
         "msgType": msgType,
         "tempId": tempId,
+        if (replyToId != null) "replyToId": replyToId,
       });
 
   void markRead(String convId) => _send({"type": "read", "convId": convId});

@@ -66,6 +66,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _recordTimer;
   bool _voiceActive = false; // garde-fou anti-race : true pendant l'appui ET l'enregistrement
 
+  // --- Réponse à un message (swipe-to-reply) ---
+  Message? _replyTo;
+
   // --- Traduction ---
   final _translateService = TranslateService();
   final Map<String, String> _translations = {};
@@ -129,6 +132,29 @@ class _ChatScreenState extends State<ChatScreen> {
                     content: m.content,
                     type: m.type,
                     status: "READ",
+                    replyToId: m.replyToId,
+                    deletedAt: m.deletedAt,
+                    media: m.media,
+                    createdAt: m.createdAt,
+                  )
+                : m)
+            .toList();
+      });
+    } else if (type == "message_status") {
+      // Mise à jour du statut d'un message (ex: SENT → DELIVERED).
+      final messageId = e["messageId"] as String?;
+      final newStatus = e["status"] as String?;
+      if (messageId == null || newStatus == null) return;
+      setState(() {
+        _messages = _messages
+            .map((m) => m.id == messageId && _statusRank(newStatus) > _statusRank(m.status)
+                ? Message(
+                    id: m.id,
+                    convId: m.convId,
+                    senderId: m.senderId,
+                    content: m.content,
+                    type: m.type,
+                    status: newStatus,
                     replyToId: m.replyToId,
                     deletedAt: m.deletedAt,
                     media: m.media,
@@ -227,6 +253,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty || _sending) return;
     final rt = context.read<RealtimeClient>();
+    final replyId = _replyTo?.id;
 
     // Voie temps réel : envoi optimiste, réconcilié à l'écho du serveur.
     if (rt.connected) {
@@ -238,19 +265,25 @@ class _ChatScreenState extends State<ChatScreen> {
         content: text,
         type: "TEXT",
         status: "SENT",
-        replyToId: null,
+        replyToId: replyId,
         media: const [],
         createdAt: DateTime.now(),
       );
-      setState(() => _messages = [..._messages, optimistic]);
+      setState(() {
+        _messages = [..._messages, optimistic];
+        _replyTo = null;
+      });
       _inputCtrl.clear();
-      rt.sendMessage(widget.convId, text, tempId);
+      rt.sendMessage(widget.convId, text, tempId, replyToId: replyId);
       _scrollToBottom();
       return;
     }
 
     // Repli REST si le WebSocket n'est pas disponible.
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _replyTo = null;
+    });
     try {
       final msg = await context.read<ChatRepository>().sendText(widget.convId, text);
       _inputCtrl.clear();
@@ -263,6 +296,105 @@ class _ChatScreenState extends State<ChatScreen> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  /// Active le mode réponse au message donné (swipe ou appui sur "Répondre").
+  void _setReplyTo(Message m) {
+    setState(() => _replyTo = m);
+    FocusScope.of(context).requestFocus(FocusNode());
+  }
+
+  // --- Helper : coches de statut (style WhatsApp) ---
+  // SENT → ✓ (gris) | DELIVERED → ✓✓ (gris) | READ → ✓✓ (bleu)
+  Widget _statusTicks(String status, Color baseColor) {
+    if (status == "READ") {
+      return const Icon(Icons.done_all, size: 15, color: AppColors.tickBlue);
+    } else if (status == "DELIVERED") {
+      return Icon(Icons.done_all, size: 15, color: baseColor);
+    }
+    return Icon(Icons.done, size: 15, color: baseColor);
+  }
+
+  /// Ordre de priorité des statuts : SENT(0) < DELIVERED(1) < READ(2).
+  int _statusRank(String s) {
+    switch (s) {
+      case "READ":
+        return 2;
+      case "DELIVERED":
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  /// Construit la ligne horodatage + coches de statut (réutilisable par toutes les bulles).
+  Widget _timestampRow(Message m, bool mine, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(_time(m.createdAt), style: TextStyle(fontSize: 10, color: color)),
+        if (mine) ...[
+          const SizedBox(width: 4),
+          _statusTicks(m.status, color),
+        ],
+      ],
+    );
+  }
+
+  /// Retrouve un message cité dans la liste locale (pour afficher l'aperçu du reply).
+  Message? _findMessage(String? id) {
+    if (id == null) return null;
+    try {
+      return _messages.firstWhere((m) => m.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Construit l'aperçu du message cité (en haut de la bulle, style WhatsApp).
+  Widget _replyPreviewHeader(Message m, bool mine) {
+    final original = _findMessage(m.replyToId);
+    if (original == null) return const SizedBox.shrink();
+
+    final onColor = mine ? Colors.white : AppColors.ink;
+    final barColor = mine ? Colors.white70 : AppColors.terracotta;
+    final previewText = original.isDeleted
+        ? tr(context, 'message_deleted')
+        : (original.content ??
+            (original.media.isNotEmpty ? '📎 ${original.media.first.filename ?? tr(context, 'file')}' : '[${original.type}]'));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: mine ? Colors.white.withOpacity(0.15) : AppColors.sand.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(left: BorderSide(color: barColor, width: 3)),
+      ),
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            original.senderId == _myId
+                ? tr(context, 'you')
+                : (widget.memberNames[original.senderId] ?? tr(context, 'reply_to')),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: barColor,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            previewText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: onColor.withOpacity(0.8)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _pickAndSendFile() async {
@@ -637,6 +769,14 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             if (!m.isDeleted) ...[
               ListTile(
+                leading: const Icon(Icons.reply, color: AppColors.terracotta),
+                title: Text(tr(context, 'reply')),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _setReplyTo(m);
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.forward, color: AppColors.forest),
                 title: Text(tr(context, 'forward')),
                 onTap: () {
@@ -756,7 +896,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
-        GestureDetector(
+        _SwipeToReply(
+          onReply: () => _setReplyTo(m),
+          child: GestureDetector(
           onLongPress: () => _showMessageOptions(m),
           child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
@@ -770,17 +912,27 @@ class _ChatScreenState extends State<ChatScreen> {
           borderRadius: BorderRadius.circular(14),
           border: mine ? null : Border.all(color: AppColors.sand),
         ),
-        child: m.isDeleted
-            ? _deletedBubble(m, mine)
-            : isImage
-                ? _imageBubble(m, mine)
-                : isFile
-                    ? _fileBubble(m, mine)
-                    : isAudio
-                        ? _audioBubble(m, mine)
-                        : _textBubble(m, mine),
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Aperçu du message cité (si réponse)
+            if (m.replyToId != null && !m.isDeleted)
+              _replyPreviewHeader(m, mine),
+            // Contenu de la bulle
+            m.isDeleted
+                ? _deletedBubble(m, mine)
+                : isImage
+                    ? _imageBubble(m, mine)
+                    : isFile
+                        ? _fileBubble(m, mine)
+                        : isAudio
+                            ? _audioBubble(m, mine)
+                            : _textBubble(m, mine),
+          ],
         ),
+          ), // Container
+        ), // GestureDetector
+        ), // _SwipeToReply
         ],
       ),
     );
@@ -856,10 +1008,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: Colors.black54,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Text(
-                _time(m.createdAt) + (mine ? (m.status == "READ" ? " ✓✓" : " ✓") : ""),
-                style: const TextStyle(fontSize: 10, color: Colors.white),
-              ),
+              child: _timestampRow(m, mine, Colors.white),
             ),
           ),
         ],
@@ -942,10 +1091,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            _time(m.createdAt) + (mine ? (m.status == "READ" ? " ✓✓" : " ✓") : ""),
-            style: TextStyle(fontSize: 10, color: onSub),
-          ),
+          _timestampRow(m, mine, onSub),
         ],
       ),
     );
@@ -1028,11 +1174,7 @@ class _ChatScreenState extends State<ChatScreen> {
           },
         ),
         const SizedBox(height: 4),
-        Text(
-          _time(m.createdAt) +
-              (mine ? (m.status == "READ" ? " ✓✓" : " ✓") : ""),
-          style: TextStyle(fontSize: 10, color: onSub),
-        ),
+        _timestampRow(m, mine, onSub),
       ],
     );
   }
@@ -1141,13 +1283,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           const SizedBox(height: 2),
-          Text(
-            _time(m.createdAt) + (mine ? (m.status == "READ" ? " ✓✓" : " ✓") : ""),
-            style: TextStyle(
-              fontSize: 10,
-              color: onSubColor,
-            ),
-          ),
+          _timestampRow(m, mine, onSubColor),
         ],
       ),
     );
@@ -1229,64 +1365,120 @@ class _ChatScreenState extends State<ChatScreen> {
     // le rebuild de setState (sinon onLongPressEnd ne se déclencherait jamais).
     return SafeArea(
       top: false,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        color: AppColors.cream,
-        child: Row(
-          children: [
-            // Bouton pièce jointe — Offstage préserve la structure du Row
-            Offstage(
-              offstage: _recording,
-              child: IconButton(
-                tooltip: tr(context, 'attach_file'),
-                icon: _uploading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.attach_file, color: AppColors.chocolate),
-                onPressed: _uploading ? null : _pickAndSendFile,
-              ),
-            ),
-            // Champ texte OU barre d'enregistrement (même slot Expanded)
-            Expanded(
-              child: _recording
-                  ? _recordingBar()
-                  : TextField(
-                      controller: _inputCtrl,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(),
-                      decoration: InputDecoration(
-                        hintText: tr(context, 'write_message'),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 4),
-            // Bouton micro — TOUJOURS à cet index (stable pour le gesture)
-            _micButton(),
-            // Bouton envoyer — Offstage préserve la structure du Row
-            Offstage(
-              offstage: _recording,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Barre de prévisualisation quand on répond à un message
+          if (_replyTo != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: AppColors.cream,
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(width: 8),
-                  CircleAvatar(
-                    backgroundColor: AppColors.terracotta,
-                    child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white),
-                      onPressed: _sending ? null : _send,
+                  Container(
+                    width: 3,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.terracotta,
+                      borderRadius: BorderRadius.circular(2),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _replyTo!.senderId == _myId
+                              ? tr(context, 'you')
+                              : (widget.memberNames[_replyTo!.senderId] ?? tr(context, 'reply_to')),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.terracotta,
+                          ),
+                        ),
+                        Text(
+                          _replyTo!.isDeleted
+                              ? tr(context, 'message_deleted')
+                              : (_replyTo!.content ??
+                                  (_replyTo!.media.isNotEmpty
+                                      ? '📎 ${_replyTo!.media.first.filename ?? tr(context, 'file')}'
+                                      : '...')),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() => _replyTo = null),
+                    child: const Icon(Icons.close, size: 20, color: Colors.black54),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: AppColors.cream,
+            child: Row(
+              children: [
+                // Bouton pièce jointe — Offstage préserve la structure du Row
+                Offstage(
+                  offstage: _recording,
+                  child: IconButton(
+                    tooltip: tr(context, 'attach_file'),
+                    icon: _uploading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.attach_file, color: AppColors.chocolate),
+                    onPressed: _uploading ? null : _pickAndSendFile,
+                  ),
+                ),
+                // Champ texte OU barre d'enregistrement (même slot Expanded)
+                Expanded(
+                  child: _recording
+                      ? _recordingBar()
+                      : TextField(
+                          controller: _inputCtrl,
+                          minLines: 1,
+                          maxLines: 4,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _send(),
+                          decoration: InputDecoration(
+                            hintText: tr(context, 'write_message'),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 4),
+                // Bouton micro — TOUJOURS à cet index (stable pour le gesture)
+                _micButton(),
+                // Bouton envoyer — Offstage préserve la structure du Row
+                Offstage(
+                  offstage: _recording,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: 8),
+                      CircleAvatar(
+                        backgroundColor: AppColors.terracotta,
+                        child: IconButton(
+                          icon: const Icon(Icons.send, color: Colors.white),
+                          onPressed: _sending ? null : _send,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1384,6 +1576,85 @@ class _FileVisual {
   final IconData icon;
   final Color color;
   const _FileVisual(this.icon, this.color);
+}
+
+/// Widget de swipe-to-reply : glisse horizontalement une bulle pour répondre.
+/// L'utilisateur fait glisser la bulle vers la droite ; une icône de réponse
+/// apparaît, et si le seuil est atteint, le callback onReply est déclenché.
+/// La bulle revient ensuite en place avec une animation.
+class _SwipeToReply extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onReply;
+  const _SwipeToReply({required this.child, required this.onReply});
+
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<_SwipeToReply>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  double _dragExtent = 0;
+  static const _threshold = 50.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+    _ctrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _dragExtent = 0;
+        _ctrl.value = 0;
+      }
+    });
+    _ctrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Pendant l'animation de retour : interpole de _dragExtent vers 0.
+    final offset = _ctrl.isAnimating ? _dragExtent * (1 - _ctrl.value) : _dragExtent;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: (d) {
+        setState(() {
+          // On ne permet que de glisser vers la droite (positif).
+          _dragExtent = (_dragExtent + d.delta.dx).clamp(0.0, _threshold * 1.4);
+        });
+      },
+      onHorizontalDragEnd: (_) {
+        if (_dragExtent >= _threshold) {
+          widget.onReply();
+        }
+        _ctrl.forward(from: 0);
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Transform.translate(
+            offset: Offset(offset, 0),
+            child: widget.child,
+          ),
+          if (offset > 5)
+            Positioned(
+              left: offset - 28,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Icon(Icons.reply_rounded, color: Colors.grey[400], size: 22),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Sélecteur de conversations pour le transfert de message (multi-sélection).

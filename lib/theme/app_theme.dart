@@ -10,6 +10,7 @@ class AppColors {
   static const Color forest = Color(0xFF2E7D32); // vert accent
   static const Color sand = Color(0xFFEADBC8);
   static const Color ink = Color(0xFF2B1B12);
+  static const Color tickBlue = Color(0xFF53BDE5); // coches "lu" (style WhatsApp)
 }
 
 class AppTheme {
