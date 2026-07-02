@@ -699,86 +699,57 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // Message vocal : bouton lecture/pause réactif + barre de progression (style WhatsApp).
+  // Message vocal : bouton lecture + barre de progression stylisée (style WhatsApp).
   Widget _audioBubble(Message m, bool mine) {
     final media = m.media.first;
-    final url = _mediaUrl(media);
-    final totalDuration =
-        media.durationMs != null ? Duration(milliseconds: media.durationMs!) : null;
-    final secs = totalDuration?.inSeconds;
+    final secs = media.durationMs != null ? (media.durationMs! / 1000).round() : null;
     final onSub = mine ? Colors.white70 : Colors.black45;
     final accent = mine ? Colors.white : AppColors.terracotta;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ValueListenableBuilder<AudioPlaybackState>(
-          valueListenable: InlineAudioPlayer.state,
-          builder: (context, audioState, _) {
-            final isActive = audioState.url == url;
-            final isPlaying = isActive && audioState.isPlaying;
-
-            double progress = 0;
-            if (isActive) {
-              final dur = audioState.duration ?? totalDuration;
-              if (dur != null && dur.inMilliseconds > 0) {
-                progress = (audioState.position.inMilliseconds /
-                        dur.inMilliseconds)
-                    .clamp(0.0, 1.0);
-              }
-            }
-
-            return InkWell(
-              onTap: () =>
-                  InlineAudioPlayer.toggle(url, totalDuration: totalDuration),
-              borderRadius: BorderRadius.circular(8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+        InkWell(
+          onTap: () => InlineAudioPlayer.play(_mediaUrl(media)),
+          borderRadius: BorderRadius.circular(8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: accent.withOpacity(0.15),
+                child: Icon(Icons.play_arrow, color: accent, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: accent.withOpacity(0.15),
-                    child: Icon(
-                      isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: accent,
-                      size: 22,
+                  SizedBox(
+                    width: 140,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: 1,
+                        minHeight: 4,
+                        backgroundColor: onSub.withOpacity(0.3),
+                        color: accent,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 140,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 4,
-                            backgroundColor: onSub.withOpacity(0.3),
-                            color: accent,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        secs != null
-                            ? "${secs}s"
-                            : tr(context, 'voice_message'),
-                        style: TextStyle(fontSize: 12, color: onSub),
-                      ),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    secs != null ? "${secs}s" : tr(context, 'voice_message'),
+                    style: TextStyle(fontSize: 12, color: onSub),
                   ),
-                  const SizedBox(width: 6),
-                  Icon(Icons.mic, size: 16, color: onSub),
                 ],
               ),
-            );
-          },
+              const SizedBox(width: 6),
+              Icon(Icons.mic, size: 16, color: onSub),
+            ],
+          ),
         ),
         const SizedBox(height: 4),
         Text(
-          _time(m.createdAt) +
-              (mine ? (m.status == "READ" ? " ✓✓" : " ✓") : ""),
+          _time(m.createdAt) + (mine ? (m.status == "READ" ? " ✓✓" : " ✓") : ""),
           style: TextStyle(fontSize: 10, color: onSub),
         ),
       ],
