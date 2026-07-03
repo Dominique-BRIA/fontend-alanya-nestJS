@@ -9,6 +9,7 @@ import '../../../widgets/back_app_bar.dart';
 import '../../../widgets/motif_background.dart';
 import '../../chat/chat_repository.dart';
 import '../../chat/screens/chat_screen.dart';
+import '../../chat/screens/new_group_screen.dart';
 import '../contacts_repository.dart';
 import 'add_contact_screen.dart';
 import 'new_chat_screen.dart';
@@ -133,16 +134,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
               if (added == true) _load();
             },
           ),
-          IconButton(
-            tooltip: "Nouvelle discussion",
-            icon: const Icon(Icons.chat_outlined),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const NewChatScreen()),
-              );
-              _load();
-            },
-          ),
           // Bouton actualiser toujours visible
           IconButton(
             tooltip: "Actualiser",
@@ -150,12 +141,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
             onPressed: _loading ? null : _load,
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: "Ajouter un contact",
-        backgroundColor: AppColors.forest,
-        onPressed: _openAddContact,
-        child: const Icon(Icons.person_add, color: Colors.white),
       ),
       body: MotifBackground(
         overlayOpacity: 0.92,
@@ -206,41 +191,54 @@ class _ContactsScreenState extends State<ContactsScreen> {
     if (contacts.isEmpty) {
       return ListView(
         children: [
-          const SizedBox(height: 80),
-          Center(
+          // --- Actions rapides (visibles même si aucun contact) ---
+          _actionTile(
+            icon: Icons.group_add,
+            color: AppColors.forest,
+            title: "Nouveau groupe",
+            subtitle: "Créer un groupe avec des contacts",
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const NewGroupScreen()),
+              );
+              _load();
+            },
+          ),
+          const Divider(height: 1),
+          _actionTile(
+            icon: Icons.person_add,
+            color: AppColors.fabPrimary,
+            title: "Nouvelle discussion",
+            subtitle: "Démarrer un chat par numéro Alanya",
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const NewChatScreen()),
+              );
+              _load();
+            },
+          ),
+          const Divider(height: 1),
+          _actionTile(
+            icon: Icons.contact_page,
+            color: AppColors.forest,
+            title: "Ajouter un contact",
+            subtitle: "Par numéro Alanya à 6 chiffres",
+            onTap: _openAddContact,
+          ),
+          const Divider(height: 1, thickness: 8, color: AppColors.cream),
+          // --- Message d'état vide ---
+          const SizedBox(height: 60),
+          const Center(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(24),
               child: Column(
                 children: [
-                  const Icon(Icons.people_outline, size: 64, color: Colors.black12),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "Aucun contact pour l'instant.",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Appuie sur + pour chercher un utilisateur\npar son numéro Alanya à 6 chiffres.",
+                  Icon(Icons.people_outline, size: 56, color: Colors.black12),
+                  SizedBox(height: 12),
+                  Text(
+                    "Aucun contact pour l'instant.\nUtilise les options ci-dessus pour en ajouter.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.black54),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: _openAddContact,
-                    icon: const Icon(Icons.person_add),
-                    label: const Text("Ajouter manuellement"),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.forest),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final added = await Navigator.of(context).push<bool>(
-                        MaterialPageRoute(builder: (_) => const PhoneSyncScreen()),
-                      );
-                      if (added == true) _load();
-                    },
-                    icon: const Icon(Icons.contacts_outlined),
-                    label: const Text("Importer depuis mon téléphone"),
                   ),
                 ],
               ),
@@ -252,10 +250,46 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
     return Stack(
       children: [
-        ListView.separated(
-          itemCount: contacts.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (_, i) => _tile(contacts[i]),
+        ListView(
+          children: [
+            // --- Actions rapides (style WhatsApp) ---
+            _actionTile(
+              icon: Icons.group_add,
+              color: AppColors.forest,
+              title: "Nouveau groupe",
+              subtitle: "Créer un groupe avec des contacts",
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NewGroupScreen()),
+                );
+                _load();
+              },
+            ),
+            const Divider(height: 1),
+            _actionTile(
+              icon: Icons.person_add,
+              color: AppColors.fabPrimary,
+              title: "Nouvelle discussion",
+              subtitle: "Démarrer un chat par numéro Alanya",
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NewChatScreen()),
+                );
+                _load();
+              },
+            ),
+            const Divider(height: 1),
+            _actionTile(
+              icon: Icons.contact_page,
+              color: AppColors.forest,
+              title: "Ajouter un contact",
+              subtitle: "Par numéro Alanya à 6 chiffres",
+              onTap: _openAddContact,
+            ),
+            const Divider(height: 1, thickness: 8, color: AppColors.cream),
+            // --- Liste des contacts ---
+            ...contacts.map((c) => _tile(c)),
+          ],
         ),
         if (_loading)
           const Positioned(
@@ -263,6 +297,25 @@ class _ContactsScreenState extends State<ContactsScreen> {
             child: LinearProgressIndicator(color: AppColors.terracotta),
           ),
       ],
+    );
+  }
+
+  /// Tuile d'action rapide (style WhatsApp) placée au-dessus de la liste.
+  Widget _actionTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color,
+        child: Icon(icon, color: Colors.white),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 13)),
+      onTap: onTap,
     );
   }
 

@@ -67,52 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openNewConversationMenu() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.contact_phone, color: AppColors.forest),
-              title: const Text("Ajouter un contact"),
-              subtitle: const Text("Par numéro Alanya à 6 chiffres"),
-              onTap: () async {
-                Navigator.pop(ctx);
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AddContactScreen()),
-                );
-                if (mounted) setState(() {});
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_add, color: AppColors.terracotta),
-              title: const Text("Nouvelle discussion"),
-              subtitle: const Text("Par numéro Alanya"),
-              onTap: () async {
-                Navigator.pop(ctx);
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const NewChatScreen()),
-                );
-                if (mounted) setState(() {});
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.group_add, color: AppColors.forest),
-              title: const Text("Nouveau groupe"),
-              subtitle: const Text("Choisir des contacts"),
-              onTap: () async {
-                Navigator.pop(ctx);
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const NewGroupScreen()),
-                );
-                if (mounted) setState(() {});
-              },
-            ),
-          ],
-        ),
-      ),
-    );
+    // Les options ont été déplacées vers l'écran Contacts (style WhatsApp).
   }
 
   @override
@@ -129,13 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           title: const Text("Alanya"),
           actions: [
-            IconButton(
-              tooltip: tr(context, 'contacts'),
-              icon: const Icon(Icons.people_alt_outlined),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ContactsScreen()),
-              ),
-            ),
             PopupMenuButton<String>(
               onSelected: (v) {
                 if (v == "profile") {
@@ -156,9 +104,11 @@ class _HomeScreenState extends State<HomeScreen> {
         body: IndexedStack(index: _tab, children: tabs),
         floatingActionButton: _tab == 0
             ? FloatingActionButton(
-                backgroundColor: AppColors.forest,
-                onPressed: _openNewConversationMenu,
-                child: const Icon(Icons.chat, color: Colors.white),
+                backgroundColor: AppColors.fabPrimary,
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ContactsScreen()),
+                ),
+                child: const Icon(Icons.people_alt, color: Colors.white),
               )
             : null,
         bottomNavigationBar: NavigationBar(
@@ -301,7 +251,7 @@ class _ConversationsTabState extends State<_ConversationsTab> {
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              "Aucune discussion.\nAppuie sur le bouton vert pour en démarrer une via un numéro Alanya.",
+              "Aucune discussion.\nAppuie sur le bouton en bas pour accéder à tes contacts et démarrer une discussion.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.black54),
             ),
