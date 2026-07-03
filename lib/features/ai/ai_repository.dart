@@ -17,4 +17,9 @@ class AiRepository {
     final data = await _api.post("/api/ai/chat", {"message": message});
     return AiMessage.fromJson(data["reply"] as Map<String, dynamic>);
   }
+
+  /// Efface tout l'historique de la conversation IA.
+  Future<void> clearHistory() async {
+    await _api.delete("/api/ai/messages");
+  }
 }

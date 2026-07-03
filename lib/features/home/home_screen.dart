@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -549,6 +550,32 @@ class _AiTabState extends State<_AiTab> {
       overlayOpacity: 0.9,
       child: Column(
         children: [
+          // --- En-tête avec actions (supprimer / partager) ---
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: AppColors.terracotta),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Assistant Alanya",
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                IconButton(
+                  tooltip: "Partager la conversation",
+                  icon: const Icon(Icons.share_outlined, color: AppColors.chocolate),
+                  onPressed: _messages.isEmpty ? null : _shareConversation,
+                ),
+                IconButton(
+                  tooltip: "Effacer la conversation",
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  onPressed: _messages.isEmpty ? null : _clearConversation,
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator(color: AppColors.terracotta))
@@ -561,9 +588,6 @@ class _AiTabState extends State<_AiTab> {
                             children: [
                               Icon(Icons.auto_awesome, size: 56, color: AppColors.clay),
                               SizedBox(height: 12),
-                              Text("Assistant Alanya",
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                              SizedBox(height: 6),
                               Text("Pose-moi une question pour commencer.",
                                   textAlign: TextAlign.center,
                                   style: TextStyle(color: Colors.black54)),
@@ -588,6 +612,46 @@ class _AiTabState extends State<_AiTab> {
         ],
       ),
     );
+  }
+
+  /// Efface toute la conversation IA (après confirmation).
+  Future<void> _clearConversation() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Effacer la conversation ?"),
+        content: const Text("Tous les échanges avec l'assistant seront supprimés."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Annuler")),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Effacer")),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await context.read<AiRepository>().clearHistory();
+      if (mounted) setState(() => _messages = []);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Suppression impossible")),
+        );
+      }
+    }
+  }
+
+  /// Partage la conversation (copie le texte dans le presse-papier).
+  Future<void> _shareConversation() async {
+    final text = _messages.map((m) {
+      final who = m.isUser ? "Moi" : "IA";
+      return "$who: ${m.content}";
+    }).join("\n\n");
+    await Clipboard.setData(ClipboardData(text: "Assistant Alanya\n\n$text"));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Conversation copiée dans le presse-papier")),
+      );
+    }
   }
 
   Widget _bubble(String text, bool mine, {bool typing = false}) {

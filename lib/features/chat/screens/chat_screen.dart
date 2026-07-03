@@ -28,6 +28,7 @@ import '../../calls/call_controller.dart';
 import '../../calls/screens/active_call_screen.dart';
 import '../../media/media_repository.dart';
 import '../chat_repository.dart';
+import 'image_viewer_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -743,7 +744,28 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _download(MessageMedia m) async {
     final name = m.filename ?? "fichier-${m.id}";
-    await downloadUrl(_downloadUrl(m), name);
+    final path = await downloadUrl(_downloadUrl(m), name);
+    if (!mounted) return;
+    if (path != null) {
+      showAppSnackBar("Sauvegardé dans SewaChat/ : $name");
+    } else {
+      showAppSnackBar("Échec du téléchargement");
+    }
+  }
+
+  /// Ouvre une image en plein écran (visionneuse avec zoom + téléchargement).
+  void _openImageViewer(Message m) {
+    final media = m.media.first;
+    final name = media.filename ?? "image-${media.id}";
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ImageViewerScreen(
+          imageUrl: "$_baseUrl${media.url}?token=${_token ?? ''}",
+          downloadUrl: _downloadUrl(media),
+          filename: name,
+        ),
+      ),
+    );
   }
 
   // Icône + couleur selon l'extension/le type du fichier.
@@ -1123,7 +1145,8 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Stack(
         children: [
           GestureDetector(
-            onTap: () => _download(m.media.first),
+            onTap: () => _openImageViewer(m),
+            onLongPress: () => _showMessageOptions(m),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 320),
               child: AuthNetworkImage(
