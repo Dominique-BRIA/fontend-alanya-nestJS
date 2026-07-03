@@ -36,19 +36,21 @@ class ChatRepository {
         .toList();
   }
 
-  Future<Message> sendText(String convId, String content) async {
+  Future<Message> sendText(String convId, String content, {String? replyToId}) async {
     final data = await _api.post("/api/conversations/$convId/messages", {
       "content": content,
       "type": "TEXT",
+      if (replyToId != null) "replyToId": replyToId,
     });
     return Message.fromJson(data);
   }
 
   /// Envoi REST d'un message média (repli si le WebSocket est indisponible).
-  Future<Message> sendMedia(String convId, String mediaId, String type) async {
+  Future<Message> sendMedia(String convId, String mediaId, String type, {String? replyToId}) async {
     final data = await _api.post("/api/conversations/$convId/messages", {
       "type": type,
       "mediaId": mediaId,
+      if (replyToId != null) "replyToId": replyToId,
     });
     return Message.fromJson(data);
   }

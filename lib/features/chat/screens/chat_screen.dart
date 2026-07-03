@@ -299,12 +299,16 @@ class _ChatScreenState extends State<ChatScreen> {
     // Repli REST si le WebSocket n'est pas disponible.
     setState(() {
       _sending = true;
-      _replyTo = null;
     });
+    // Capture reply before clearing
+    final replyId = _replyTo?.id;
     try {
-      final msg = await context.read<ChatRepository>().sendText(widget.convId, text);
+      final msg = await context.read<ChatRepository>().sendText(widget.convId, text, replyToId: replyId);
       _inputCtrl.clear();
-      setState(() => _messages = [..._messages, msg]);
+      setState(() {
+        _messages = [..._messages, msg];
+        _replyTo = null;
+      });
       _scrollToBottom();
     } on ApiException catch (e) {
       _showError(e.message);
@@ -510,6 +514,23 @@ class _ChatScreenState extends State<ChatScreen> {
     int? durationMs,
   }) async {
     setState(() => _uploading = true);
+
+    // Capture reply context BEFORE clearing (for media sends)
+    final replyId = _replyTo?.id;
+    final replyMsg = _replyTo;
+    final replySnapshot = replyMsg != null
+        ? ReplyPreview(
+            id: replyMsg.id,
+            senderId: replyMsg.senderId,
+            type: replyMsg.type,
+            content: replyMsg.isDeleted ? null : replyMsg.content,
+            isDeleted: replyMsg.isDeleted,
+          )
+        : null;
+
+    // Clear the reply bar immediately (WhatsApp behavior)
+    if (mounted) setState(() => _replyTo = null);
+
     final media = context.read<MediaRepository>();
     final rt = context.read<RealtimeClient>();
     try {
@@ -519,12 +540,28 @@ class _ChatScreenState extends State<ChatScreen> {
         mime,
         durationMs: durationMs,
       );
+
       if (rt.connected) {
-        rt.sendMedia(widget.convId, uploaded.id, msgType,
-            "tmp-${DateTime.now().microsecondsSinceEpoch}");
+        // WS path: pass replyToId (server will echo full message + replyTo snapshot)
+        rt.sendMedia(
+          widget.convId,
+          uploaded.id,
+          msgType,
+          "tmp-${DateTime.now().microsecondsSinceEpoch}",
+          replyToId: replyId,
+        );
       } else {
-        final msg = await context.read<ChatRepository>().sendMedia(widget.convId, uploaded.id, msgType);
-        if (mounted) setState(() => _messages = [..._messages, msg]);
+        // REST fallback: now supports replyToId (backend returns enriched message)
+        final msg = await context.read<ChatRepository>().sendMedia(
+          widget.convId,
+          uploaded.id,
+          msgType,
+          replyToId: replyId,
+        );
+        if (mounted) {
+          // The returned msg already has replyTo snapshot from backend
+          setState(() => _messages = [..._messages, msg]);
+        }
       }
       _scrollToBottom();
     } on ApiException catch (e) {
