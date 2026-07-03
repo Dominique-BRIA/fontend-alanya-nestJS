@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/api_client.dart';
+import '../../../core/token_storage.dart';
 import '../../../models/status.dart';
+import '../../../widgets/auth_network_image.dart';
 import '../status_repository.dart';
 import 'create_status_screen.dart' show colorFromHex;
 
@@ -17,11 +20,25 @@ class StatusViewerScreen extends StatefulWidget {
 
 class _StatusViewerScreenState extends State<StatusViewerScreen> {
   int _index = 0;
+  String _baseUrl = "";
+  String? _token;
 
   @override
   void initState() {
     super.initState();
+    _loadConfig();
     _markViewed();
+  }
+
+  Future<void> _loadConfig() async {
+    _baseUrl = context.read<ApiClient>().baseUrl;
+    _token = await context.read<TokenStorage>().accessToken;
+    if (mounted) setState(() {});
+  }
+
+  /// Construit l'URL complète d'un média de statut (avec token d'authentification).
+  String _mediaUrl(String path) {
+    return "$_baseUrl$path?token=${_token ?? ''}";
   }
 
   void _markViewed() {
@@ -153,10 +170,23 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           )
-                        : const Text(
-                            "[Média non pris en charge dans cette version]",
-                            style: TextStyle(color: Colors.white70),
-                          ),
+                        : s.type == "IMAGE" && s.mediaUrl != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: _token == null
+                                    ? const CircularProgressIndicator(color: Colors.white)
+                                    : AuthNetworkImage(
+                                        url: "$_baseUrl${s.mediaUrl}",
+                                        token: _token,
+                                        fit: BoxFit.contain,
+                                      ),
+                              )
+                            : s.type == "VIDEO" && s.mediaUrl != null
+                                ? _videoPlaceholder(s.mediaUrl!)
+                                : const Text(
+                                    "[Média non pris en charge]",
+                                    style: TextStyle(color: Colors.white70),
+                                  ),
                   ),
                 ),
               ),
@@ -177,6 +207,23 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Placeholder pour la vidéo — l'app ouvre le lecteur système au tap.
+  /// (La lecture vidéo intégrée nécessiterait une dépendance supplémentaire ;
+  /// pour l'instant on propose un bouton de téléchargement/ouverture.)
+  Widget _videoPlaceholder(String mediaUrl) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.play_circle_fill, size: 72, color: Colors.white70),
+        const SizedBox(height: 12),
+        const Text(
+          "Vidéo",
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+      ],
     );
   }
 

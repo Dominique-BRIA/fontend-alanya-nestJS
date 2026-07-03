@@ -11,7 +11,6 @@ import '../../chat/chat_repository.dart';
 import '../../chat/screens/chat_screen.dart';
 import '../../chat/screens/new_group_screen.dart';
 import '../contacts_repository.dart';
-import 'add_contact_screen.dart';
 import 'new_chat_screen.dart';
 import 'phone_sync_screen.dart';
 
@@ -109,12 +108,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
   void _snack(String m) => showAppSnackBar(m);
 
-  Future<void> _openAddContact() async {
-    final added = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AddContactScreen()),
-    );
-    if (added == true) _load();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -208,8 +201,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
           _actionTile(
             icon: Icons.person_add,
             color: AppColors.fabPrimary,
-            title: "Nouvelle discussion",
-            subtitle: "Démarrer un chat par numéro Alanya",
+            title: "Ajouter un contact",
+            subtitle: "Rechercher par numéro Alanya",
             onTap: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const NewChatScreen()),
@@ -217,14 +210,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
               _load();
             },
           ),
-          const Divider(height: 1),
-          _actionTile(
-            icon: Icons.contact_page,
-            color: AppColors.forest,
-            title: "Ajouter un contact",
-            subtitle: "Par numéro Alanya à 6 chiffres",
-            onTap: _openAddContact,
-          ),
+
           const Divider(height: 1, thickness: 8, color: AppColors.cream),
           // --- Message d'état vide ---
           const SizedBox(height: 60),
@@ -269,8 +255,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
             _actionTile(
               icon: Icons.person_add,
               color: AppColors.fabPrimary,
-              title: "Nouvelle discussion",
-              subtitle: "Démarrer un chat par numéro Alanya",
+              title: "Ajouter un contact",
+              subtitle: "Rechercher par numéro Alanya",
               onTap: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const NewChatScreen()),
@@ -278,14 +264,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                 _load();
               },
             ),
-            const Divider(height: 1),
-            _actionTile(
-              icon: Icons.contact_page,
-              color: AppColors.forest,
-              title: "Ajouter un contact",
-              subtitle: "Par numéro Alanya à 6 chiffres",
-              onTap: _openAddContact,
-            ),
+
             const Divider(height: 1, thickness: 8, color: AppColors.cream),
             // --- Liste des contacts ---
             ...contacts.map((c) => _tile(c)),

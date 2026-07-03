@@ -19,6 +19,14 @@ class StatusRepository {
     });
   }
 
+  /// Publie un statut média (image ou vidéo) via l'ID d'un média déjà uploadé.
+  Future<void> createMedia(String mediaId, String type) async {
+    await _api.post("/api/statuses", {
+      "type": type,
+      "mediaId": mediaId,
+    });
+  }
+
   Future<void> markViewed(String statusId) async {
     await _api.post("/api/statuses/$statusId/view", {});
   }

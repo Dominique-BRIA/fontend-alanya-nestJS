@@ -1,8 +1,12 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api_client.dart';
 import '../../../theme/app_theme.dart';
+import '../../media/media_repository.dart';
 import '../status_repository.dart';
 
 /// Convertit un hex (#RRGGBB) en Color opaque.
@@ -62,6 +66,56 @@ class _CreateStatusScreenState extends State<CreateStatusScreen> {
     }
   }
 
+  /// Sélectionne une image ou vidéo depuis la galerie, l'upload, puis publie
+  /// le statut média.
+  Future<void> _pickAndPublishMedia() async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.media,
+        withData: true,
+      );
+    } catch (_) {
+      _snack("Sélection de média indisponible sur cette plateforme");
+      return;
+    }
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    final mime = file.name.toLowerCase().endsWith('.mov') ||
+            file.name.toLowerCase().endsWith('.mp4')
+        ? 'video/mp4'
+        : 'image/jpeg';
+
+    final isVideo = mime.startsWith('video/');
+
+    setState(() => _publishing = true);
+    final media = context.read<MediaRepository>();
+    final repo = context.read<StatusRepository>();
+    final nav = Navigator.of(context);
+    try {
+      final uploaded = await media.upload(
+        Uint8List.fromList(bytes),
+        file.name,
+        mime,
+      );
+      await repo.createMedia(
+        uploaded.id,
+        isVideo ? 'VIDEO' : 'IMAGE',
+      );
+      nav.pop(true);
+    } on ApiException catch (e) {
+      _snack(e.message);
+    } catch (_) {
+      _snack("Publication du média impossible");
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
+  }
+
   void _snack(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
@@ -83,6 +137,11 @@ class _CreateStatusScreenState extends State<CreateStatusScreen> {
             : null,
         title: const Text("Nouveau statut"),
         actions: [
+          IconButton(
+            tooltip: "Publier une photo ou vidéo",
+            icon: const Icon(Icons.photo_camera_outlined),
+            onPressed: _publishing ? null : _pickAndPublishMedia,
+          ),
           IconButton(
             tooltip: "Changer la couleur",
             icon: const Icon(Icons.palette),
@@ -109,11 +168,14 @@ class _CreateStatusScreenState extends State<CreateStatusScreen> {
                     fontSize: 26,
                     fontWeight: FontWeight.w600,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: InputBorder.none,
-                    counterStyle: TextStyle(color: Colors.white70),
+                    // Contour-matériel (résout le fond blanc hérité du thème global).
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    counterStyle: const TextStyle(color: Colors.white70),
                     hintText: "Tape ton statut…",
-                    hintStyle: TextStyle(color: Colors.white60, fontSize: 24),
+                    hintStyle: const TextStyle(color: Colors.white60, fontSize: 24),
                   ),
                 ),
               ),

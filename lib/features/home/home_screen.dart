@@ -108,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const ContactsScreen()),
                 ),
-                child: const Icon(Icons.people_alt, color: Colors.white),
+                child: const Icon(Icons.chat_bubble, color: Colors.white),
               )
             : null,
         bottomNavigationBar: NavigationBar(
