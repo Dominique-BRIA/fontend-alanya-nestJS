@@ -70,6 +70,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Message? _replyTo;
   // Clés globales pour chaque message → permet le scroll-to-message au clic sur une réponse.
   final Map<String, GlobalKey> _messageKeys = {};
+  // Cache local des snapshots de messages cités (replyTo).
+  // Indépendant de _messages : survit aux réconciliations/rebuilds.
+  // Clé = messageId, Valeur = snapshot ReplyPreview.
+  final Map<String, ReplyPreview> _replySnapshots = {};
 
   // --- Traduction ---
   final _translateService = TranslateService();
@@ -108,6 +112,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final data = e["message"] as Map<String, dynamic>?;
       if (data == null || data["convId"] != widget.convId) return;
       final msg = Message.fromJson(data);
+      _cacheMsg(msg); // cache le snapshot dès la réception
       final tempId = e["tempId"] as String?;
       setState(() {
         // Réconcilie l'optimiste (par tempId) sinon ajoute si nouveau.
@@ -220,6 +225,10 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages = msgs.reversed.toList(); // du plus ancien au plus récent
         _loading = false;
       });
+      // Met en cache tous les snapshots pour les aperçus de réponse.
+      for (final m in _messages) {
+        _cacheMsg(m);
+      }
       _markReadRemote();
       _scrollToBottom();
     } catch (_) {
@@ -242,6 +251,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final atBottom = !_scrollCtrl.hasClients ||
           _scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 60;
       setState(() => _messages = latest);
+      for (final m in latest) {
+        _cacheMsg(m);
+      }
       // Un message entrant => on marque comme lu.
       if (hadMore) repo.markRead(widget.convId);
       if (hadMore && atBottom) _scrollToBottom();
@@ -300,10 +312,9 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _sending = true;
     });
-    // Capture reply before clearing
-    final replyId = _replyTo?.id;
     try {
       final msg = await context.read<ChatRepository>().sendText(widget.convId, text, replyToId: replyId);
+      _cacheMsg(msg);
       _inputCtrl.clear();
       setState(() {
         _messages = [..._messages, msg];
@@ -372,6 +383,33 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Met en cache un snapshot d'un message (pour les aperçus de réponse).
+  /// Appelée pour CHAQUE message traité → le cache reste à jour et survit
+  /// aux réconciliations de _messages (qui remplace les objets en place).
+  void _cacheMsg(Message m) {
+    _replySnapshots[m.id] = ReplyPreview(
+      id: m.id,
+      senderId: m.senderId,
+      type: m.type,
+      content: m.isDeleted ? null : m.content,
+      isDeleted: m.isDeleted,
+    );
+  }
+
+  /// Récupère le snapshot d'un message cité : cache local → serveur → liste live.
+  ReplyPreview? _resolveReply(Message m) {
+    if (m.replyTo != null) return m.replyTo;
+    if (m.replyToId == null) return null;
+    final cached = _replySnapshots[m.replyToId];
+    if (cached != null) return cached;
+    final live = _findMessage(m.replyToId);
+    if (live != null) {
+      _cacheMsg(live);
+      return _replySnapshots[live.id];
+    }
+    return null;
+  }
+
   /// Fait défiler la liste vers le message cité (clic sur l'aperçu de réponse).
   void _scrollToMessage(String id) {
     final key = _messageKeys[id];
@@ -430,8 +468,8 @@ class _ChatScreenState extends State<ChatScreen> {
   /// original — fonctionne même si le message n'est plus chargé localement.
   /// Cliquable : scroll vers le message original si celui-ci est dans la liste.
   Widget _replyPreviewHeader(Message m, bool mine) {
-    // Priorité au snapshot du backend ; repli sur la liste locale.
-    final snapshot = m.replyTo;
+    // Résout le snapshot via le cache local (priorité), le serveur, ou la liste live.
+    final snapshot = _resolveReply(m);
     final original = _findMessage(m.replyToId);
     if (snapshot == null && original == null) return const SizedBox.shrink();
 
