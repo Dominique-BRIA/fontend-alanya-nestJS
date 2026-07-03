@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../core/api_client.dart';
+import '../../core/message_cache.dart';
 import '../../core/token_storage.dart';
 import '../../models/auth_user.dart';
 import 'auth_repository.dart';
@@ -117,6 +118,7 @@ class AuthController extends ChangeNotifier {
       }
     }
     await _storage.clear();
+    await MessageCache.clear();
     _set(AuthStatus.unauthenticated, null);
   }
 

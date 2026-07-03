@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+
+import '../../../core/message_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -216,24 +218,42 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _load() async {
+    _myId = context.read<AuthController>().user?.id;
+    _baseUrl = context.read<ApiClient>().baseUrl;
+    _token = await context.read<TokenStorage>().accessToken;
+
+    // 1) Charge d'abord le cache local (affichage instantané, offline-first).
+    final cached = await MessageCache.getConv(widget.convId);
+    if (cached.isNotEmpty && mounted) {
+      setState(() {
+        _messages = cached;
+        _loading = false;
+      });
+      for (final m in _messages) {
+        _cacheMsg(m);
+      }
+      _scrollToBottom();
+    }
+
+    // 2) Synchronise avec le serveur en arrière-plan.
     try {
-      _myId = context.read<AuthController>().user?.id;
-      _baseUrl = context.read<ApiClient>().baseUrl;
-      _token = await context.read<TokenStorage>().accessToken;
       final repo = context.read<ChatRepository>();
       final msgs = await repo.getMessages(widget.convId);
       if (!mounted) return;
+      final reversed = msgs.reversed.toList();
+      // Sauvegarde dans le cache local pour la prochaine fois.
+      await MessageCache.putConv(widget.convId, reversed);
       setState(() {
-        _messages = msgs.reversed.toList(); // du plus ancien au plus récent
+        _messages = reversed;
         _loading = false;
       });
-      // Met en cache tous les snapshots pour les aperçus de réponse.
       for (final m in _messages) {
         _cacheMsg(m);
       }
       _markReadRemote();
       _scrollToBottom();
     } catch (_) {
+      // Erreur réseau : si on a déjà le cache, on le garde.
       if (mounted) setState(() => _loading = false);
     }
   }
