@@ -29,6 +29,7 @@ import '../../calls/screens/active_call_screen.dart';
 import '../../media/media_repository.dart';
 import '../chat_repository.dart';
 import 'image_viewer_screen.dart';
+import 'video_viewer_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -768,6 +769,21 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  /// Ouvre une vidéo dans le lecteur vidéo intégré (plein écran).
+  void _openVideoViewer(Message m) {
+    final media = m.media.first;
+    final name = media.filename ?? "video-${media.id}";
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => VideoViewerScreen(
+          videoUrl: "$_baseUrl${media.url}?token=${_token ?? ''}",
+          downloadUrl: _downloadUrl(media),
+          filename: name,
+        ),
+      ),
+    );
+  }
+
   // Icône + couleur selon l'extension/le type du fichier.
   _FileVisual _fileVisual(MessageMedia m) {
     final ext = _ext(m.filename ?? "");
@@ -1047,6 +1063,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _bubble(Message m, bool mine) {
     final isImage = m.type == "IMAGE" && m.media.isNotEmpty;
+    final isVideo = m.type == "VIDEO" && m.media.isNotEmpty;
     final isFile = m.type == "FILE" && m.media.isNotEmpty;
     final isAudio = m.type == "AUDIO" && m.media.isNotEmpty;
     final senderLabel = widget.isGroup && !mine
@@ -1097,11 +1114,13 @@ class _ChatScreenState extends State<ChatScreen> {
                 ? _deletedBubble(m, mine)
                 : isImage
                     ? _imageBubble(m, mine)
-                    : isFile
-                        ? _fileBubble(m, mine)
-                        : isAudio
-                            ? _audioBubble(m, mine)
-                            : _textBubble(m, mine),
+                    : isVideo
+                        ? _videoBubble(m, mine)
+                        : isFile
+                            ? _fileBubble(m, mine)
+                            : isAudio
+                                ? _audioBubble(m, mine)
+                                : _textBubble(m, mine),
           ],
         ),
           ), // Container
@@ -1187,6 +1206,77 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Vignette vidéo cliquable avec bouton play → ouvre le lecteur intégré.
+  Widget _videoBubble(Message m, bool mine) {
+    final onSub = mine ? Colors.white70 : Colors.black45;
+    return GestureDetector(
+      onTap: () => _openVideoViewer(m),
+      onLongPress: () => _showMessageOptions(m),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: Stack(
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280, maxWidth: 274),
+              child: Container(
+                color: Colors.black87,
+                width: 274,
+                height: 200,
+                child: const Center(
+                  child: Icon(Icons.movie, size: 48, color: Colors.white38),
+                ),
+              ),
+            ),
+            // Bouton play central
+            Positioned.fill(
+              child: Center(
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 36),
+                ),
+              ),
+            ),
+            // Bouton télécharger
+            Positioned(
+              right: 6,
+              top: 6,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => _download(m.media.first),
+                  child: const Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(Icons.download, size: 18, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+            // Horodatage
+            Positioned(
+              right: 6,
+              bottom: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: _timestampRow(m, mine, Colors.white),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

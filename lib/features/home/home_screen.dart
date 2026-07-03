@@ -604,7 +604,7 @@ class _AiTabState extends State<_AiTab> {
                             return _bubble("…", false, typing: true);
                           }
                           final m = _messages[i];
-                          return _bubble(m.content, m.isUser);
+                          return _bubble(m.content, m.isUser, msg: m);
                         },
                       )),
           ),
@@ -654,22 +654,92 @@ class _AiTabState extends State<_AiTab> {
     }
   }
 
-  Widget _bubble(String text, bool mine, {bool typing = false}) {
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: const BoxConstraints(maxWidth: 300),
-        decoration: BoxDecoration(
-          color: mine ? AppColors.terracotta : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: mine ? null : Border.all(color: AppColors.sand),
+  Widget _bubble(String text, bool mine, {bool typing = false, AiMessage? msg}) {
+    return GestureDetector(
+      onLongPress: msg == null ? null : () => _showAiMessageOptions(msg),
+      child: Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          constraints: const BoxConstraints(maxWidth: 300),
+          decoration: BoxDecoration(
+            color: mine ? AppColors.terracotta : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: mine ? null : Border.all(color: AppColors.sand),
+          ),
+          child: typing
+              ? const Text("L'assistant écrit…",
+                  style: TextStyle(color: Colors.black54, fontStyle: FontStyle.italic))
+              : Text(text, style: TextStyle(color: mine ? Colors.white : AppColors.ink)),
         ),
-        child: typing
-            ? const Text("L'assistant écrit…",
-                style: TextStyle(color: Colors.black54, fontStyle: FontStyle.italic))
-            : Text(text, style: TextStyle(color: mine ? Colors.white : AppColors.ink)),
+      ),
+    );
+  }
+
+  /// Menu contextuel pour un message IA (copier, partager, supprimer).
+  void _showAiMessageOptions(AiMessage msg) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.copy, color: AppColors.chocolate),
+              title: const Text("Copier"),
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: msg.content));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Copié dans le presse-papier")),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share, color: AppColors.forest),
+              title: const Text("Partager"),
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: msg.content));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Message partagé (copié)")),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text("Supprimer ce message"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _deleteAiMessage(msg);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Supprime un message IA local (optimiste).
+  Future<void> _deleteAiMessage(AiMessage msg) async {
+    setState(() {
+      _messages = _messages.where((m) => m.id != msg.id).toList();
+    });
+    // Note : l'API ne permet pas de supprimer un message individuel, seulement
+    // toute la conversation. On supprime localement pour l'UX.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text("Message supprimé"),
+        action: SnackBarAction(
+          label: "Annuler",
+          textColor: Colors.white,
+          onPressed: () {
+            setState(() {
+              _messages = [..._messages, msg]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+            });
+          },
+        ),
       ),
     );
   }
