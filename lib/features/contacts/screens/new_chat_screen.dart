@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/api_client.dart';
@@ -10,7 +11,11 @@ import '../../chat/chat_repository.dart';
 import '../../chat/screens/chat_screen.dart';
 import '../contacts_repository.dart';
 
-/// Recherche d'un utilisateur par numéro public à 6 chiffres, puis démarrage d'une discussion.
+/// Ajout d'un contact + démarrage d'une discussion (style WhatsApp).
+///
+/// Formulaire simple : nom (optionnel) + numéro Alanya à 6 chiffres + bouton
+/// « Enregistrer ». Si le numéro n'existe pas, on affiche une erreur claire.
+/// Si l'utilisateur est déjà un contact, on ouvre directement le chat.
 class NewChatScreen extends StatefulWidget {
   const NewChatScreen({super.key});
 
@@ -19,141 +24,165 @@ class NewChatScreen extends StatefulWidget {
 }
 
 class _NewChatScreenState extends State<NewChatScreen> {
+  final _nameCtrl = TextEditingController();
   final _numberCtrl = TextEditingController();
-  bool _loading = false;
-  UserSearchResult? _result;
-  String? _error;
+  bool _saving = false;
+  String? _numberError;
 
   @override
   void dispose() {
+    _nameCtrl.dispose();
     _numberCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _search() async {
+  bool get _isNumberValid =>
+      _numberCtrl.text.trim().length == 6 &&
+      RegExp(r'^\d{6}$').hasMatch(_numberCtrl.text.trim());
+
+  /// Enregistrer le contact puis ouvrir la discussion.
+  Future<void> _save() async {
     final number = _numberCtrl.text.trim();
-    if (number.length != 6) {
-      setState(() => _error = "Entre un numéro à 6 chiffres");
+
+    // Validation locale du numéro.
+    if (!_isNumberValid) {
+      setState(() => _numberError = "Le numéro Alanya doit comporter 6 chiffres");
       return;
     }
     setState(() {
-      _loading = true;
-      _error = null;
-      _result = null;
+      _numberError = null;
+      _saving = true;
     });
-    try {
-      final res = await context.read<ContactsRepository>().searchByNumber(number);
-      setState(() => _result = res);
-    } on ApiException catch (e) {
-      setState(() => _error = e.message);
-    } catch (_) {
-      setState(() => _error = "Recherche impossible");
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
 
-  Future<void> _startChat(UserSearchResult user) async {
-    setState(() => _loading = true);
     final contacts = context.read<ContactsRepository>();
     final chat = context.read<ChatRepository>();
+    final alias = _nameCtrl.text.trim();
+
     try {
+      // 1) Vérifie que le numéro correspond à un utilisateur réel.
+      final user = await contacts.searchByNumber(number);
+
+      // 2) Ajoute aux contacts si ce n'est pas déjà fait (avec alias si fourni).
       if (!user.alreadyContact) {
-        await contacts.add(user.publicNumber);
+        await contacts.add(number, alias: alias.isEmpty ? null : alias);
+        if (mounted) showAppSnackBar("Contact enregistré ✓");
       }
-      final convId = await chat.createDirect(user.publicNumber);
+
+      // 3) Crée (ou récupère) la conversation et l'ouvre.
+      final convId = await chat.createDirect(number);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => ChatScreen(convId: convId, title: user.pseudo ?? user.publicNumber),
+          builder: (_) => ChatScreen(
+            convId: convId,
+            title: alias.isNotEmpty ? alias : (user.pseudo ?? number),
+          ),
         ),
       );
     } on ApiException catch (e) {
-      _showError(e.message);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      if (e.statusCode == 404) {
+        setState(() => _numberError = "Aucun utilisateur avec ce numéro Alanya");
+      } else if (e.code == 'ALREADY_CONTACT') {
+        // Déjà contact : on ouvre quand même la discussion.
+        try {
+          final convId = await chat.createDirect(number);
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) =>
+                  ChatScreen(convId: convId, title: alias.isNotEmpty ? alias : number),
+            ),
+          );
+        } catch (_) {
+          showAppSnackBar("Impossible d'ouvrir la discussion");
+        }
+      } else {
+        showAppSnackBar(e.message);
+      }
     } catch (_) {
-      _showError("Impossible de démarrer la discussion");
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      showAppSnackBar("Enregistrement impossible. Vérifie ta connexion.");
     }
   }
-
-  void _showError(String m) => showAppSnackBar(m);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: backAppBar(context, "Nouvelle discussion"),
+      appBar: backAppBar(context, "Ajouter un contact"),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // --- Avatar placeholder ---
+              Center(
+                child: CircleAvatar(
+                  radius: 44,
+                  backgroundColor: AppColors.fabPrimary,
+                  child: const Icon(Icons.person_add, size: 40, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // --- Champ nom ---
+              TextField(
+                controller: _nameCtrl,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: "Nom du contact",
+                  hintText: "Ex. Marie, Papa, Collègue…",
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // --- Champ numéro Alanya ---
+              TextField(
+                controller: _numberCtrl,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: "Numéro Alanya",
+                  hintText: "6 chiffres",
+                  prefixIcon: const Icon(Icons.tag),
+                  counterText: "",
+                  errorText: _numberError,
+                ),
+                onChanged: (_) {
+                  if (_numberError != null) setState(() => _numberError = null);
+                },
+                onSubmitted: (_) => _save(),
+              ),
+              const SizedBox(height: 8),
               const Text(
-                "Recherche par numéro Alanya",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                "Le numéro Alanya est un identifiant public à 6 chiffres "
+                "que chaque utilisateur reçoit à l'inscription.",
+                style: TextStyle(fontSize: 12, color: Colors.black54),
               ),
-              const SizedBox(height: 4),
-              const Text("Saisis le numéro public à 6 chiffres de ton contact.",
-                  style: TextStyle(color: Colors.black54)),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _numberCtrl,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      decoration: const InputDecoration(
-                        labelText: "Numéro (6 chiffres)",
-                        counterText: "",
-                        prefixIcon: Icon(Icons.tag),
-                      ),
-                      onSubmitted: (_) => _search(),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _search,
-                      child: const Icon(Icons.search),
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 32),
+
+              // --- Bouton Enregistrer ---
+              SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _saving ? null : _save,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  label: Text(_saving ? "Enregistrement…" : "Enregistrer"),
+                ),
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-              ],
-              const SizedBox(height: 16),
-              if (_loading) const Center(child: CircularProgressIndicator(color: AppColors.terracotta)),
-              if (_result != null) _resultCard(_result!),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _resultCard(UserSearchResult user) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.sand),
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppColors.clay,
-          child: Text((user.pseudo ?? "?")[0].toUpperCase(),
-              style: const TextStyle(color: Colors.white)),
-        ),
-        title: Text(user.pseudo ?? "Utilisateur ${user.publicNumber}"),
-        subtitle: Text("Numéro : ${user.publicNumber}"),
-        trailing: ElevatedButton(
-          onPressed: _loading ? null : () => _startChat(user),
-          child: const Text("Discuter"),
         ),
       ),
     );
