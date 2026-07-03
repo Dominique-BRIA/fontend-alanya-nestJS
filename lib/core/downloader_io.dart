@@ -98,8 +98,10 @@ String _subfolderFor(String ext) {
 Future<Directory> _getBaseDir() async {
   if (Platform.isAndroid) {
     // getDownloadsDirectory() retourne null sur Android.
-    // getExternalStorageDirectory() → /storage/emulated/0/Android/data/<pkg>/files
-    return getExternalStorageDirectory() ?? getApplicationDocumentsDirectory();
+    final external = await getExternalStorageDirectory();
+    if (external != null) return external;
+    final docs = await getApplicationDocumentsDirectory();
+    return docs;
   }
   final downloads = await getDownloadsDirectory();
   if (downloads != null) return downloads;

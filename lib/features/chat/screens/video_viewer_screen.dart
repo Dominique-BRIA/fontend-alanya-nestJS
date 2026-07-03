@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../core/downloader.dart';
-import '../../theme/app_theme.dart';
+import '../../../core/downloader.dart';
+import '../../../theme/app_theme.dart';
 
 /// Visionneuse vidéo plein écran (style WhatsApp).
 /// - Lecture/pause au tap
 /// - Barre de progression
 /// - Bouton télécharger
-/// - Plein écran
 class VideoViewerScreen extends StatefulWidget {
   const VideoViewerScreen({
     super.key,
@@ -58,19 +57,27 @@ class _VideoViewerScreenState extends State<VideoViewerScreen> {
 
   Future<void> _download() async {
     setState(() => _downloading = true);
-    final path = await download(widget.downloadUrl, widget.filename);
+    final path = await downloadOnly(widget.downloadUrl, widget.filename);
     setState(() => _downloading = false);
     if (!mounted) return;
     if (path != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Vidéo sauvegardée dans SewaChat/Videos/'),
+          content: const Text('Vidéo sauvegardée'),
           backgroundColor: AppColors.forest,
+          action: SnackBarAction(
+            label: 'Ouvrir',
+            textColor: Colors.white,
+            onPressed: () => openLocalFile(path),
+          ),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Échec du téléchargement'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Échec du téléchargement'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -88,7 +95,8 @@ class _VideoViewerScreenState extends State<VideoViewerScreen> {
                 IconButton(
                   icon: _downloading
                       ? const SizedBox(
-                          width: 20, height: 20,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.download),
                   onPressed: _downloading ? null : _download,
@@ -141,19 +149,21 @@ class _VideoViewerScreenState extends State<VideoViewerScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Row(
             children: [
-              Text(_fmtDuration(position), style: const TextStyle(color: Colors.white, fontSize: 12)),
+              Text(_fmtDuration(position),
+                  style: const TextStyle(color: Colors.white, fontSize: 12)),
               Expanded(
                 child: VideoProgressIndicator(
                   _ctrl,
                   allowScrubbing: true,
-                  colors: const VideoProgressColors(
+                  colors: VideoProgressColors(
                     playedColor: AppColors.terracotta,
                     bufferedColor: Colors.white24,
                     backgroundColor: Colors.white12,
                   ),
                 ),
               ),
-              Text(_fmtDuration(duration), style: const TextStyle(color: Colors.white, fontSize: 12)),
+              Text(_fmtDuration(duration),
+                  style: const TextStyle(color: Colors.white, fontSize: 12)),
             ],
           ),
         ),
