@@ -88,12 +88,13 @@ String _subfolderFor(String ext) {
 }
 
 /// Répertoire de base : Downloads sur Android, Documents sur desktop.
+/// Gère correctement la nullabilité de getDownloadsDirectory().
 Future<Directory> _getBaseDir() async {
-  if (Platform.isAndroid || Platform.isIOS) {
-    // /storage/emulated/0/Download (Android) ou Documents (iOS)
-    return getDownloadsDirectory() ?? getApplicationDocumentsDirectory();
-  }
-  return getDownloadsDirectory() ?? getApplicationDocumentsDirectory();
+  // getDownloadsDirectory() peut retourner null sur certaines plateformes.
+  final downloads = await getDownloadsDirectory();
+  if (downloads != null) return downloads;
+  // Repli : dossier Documents de l'application.
+  return getApplicationDocumentsDirectory();
 }
 
 /// Génère un chemin unique (ajoute (1), (2)… si le fichier existe déjà).

@@ -12,3 +12,12 @@ Future<void> downloadUrl(String url, String filename) async {
   anchor.click();
   anchor.remove();
 }
+
+/// Web : même comportement que downloadUrl (le navigateur gère la sauvegarde).
+Future<String?> downloadOnly(String url, String filename) async {
+  await downloadUrl(url, filename);
+  return null; // pas de système de fichiers local sur web
+}
+
+/// Web : pas d'ouverture de fichier local (le navigateur s'en charge).
+Future<void> openLocalFile(String path) async {}

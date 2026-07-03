@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/downloader.dart';
-import '../../theme/app_theme.dart';
+import '../../../core/downloader.dart';
+import '../../../theme/app_theme.dart';
 
 /// Visionneuse plein écran pour une image (style WhatsApp).
 /// - Pinch-to-zoom pour zoomer/dézoomer
