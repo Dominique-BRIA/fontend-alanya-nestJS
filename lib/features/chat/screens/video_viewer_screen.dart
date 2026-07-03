@@ -6,8 +6,9 @@ import '../../../theme/app_theme.dart';
 
 /// Visionneuse vidéo plein écran (style WhatsApp).
 /// - Lecture/pause au tap
-/// - Barre de progression
+/// - Barre de progression avec seek
 /// - Bouton télécharger
+/// - Gestion d'erreur : propose le téléchargement si la lecture échoue
 class VideoViewerScreen extends StatefulWidget {
   const VideoViewerScreen({
     super.key,
@@ -25,33 +26,43 @@ class VideoViewerScreen extends StatefulWidget {
 }
 
 class _VideoViewerScreenState extends State<VideoViewerScreen> {
-  late VideoPlayerController _ctrl;
+  VideoPlayerController? _ctrl;
   bool _initialized = false;
+  bool _hasError = false;
   bool _showControls = true;
   bool _downloading = false;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-    _ctrl.initialize().then((_) {
-      if (mounted) {
-        setState(() => _initialized = true);
-        _ctrl.play();
-        _ctrl.setLooping(false);
-      }
-    });
-    _ctrl.addListener(_listener);
+    _initPlayer();
   }
 
-  void _listener() {
-    if (mounted) setState(() {});
+  void _initPlayer() {
+    _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    _ctrl!.initialize().then((_) {
+      if (mounted && !_hasError) {
+        setState(() => _initialized = true);
+        _ctrl!.play();
+        _ctrl!.setLooping(false);
+      }
+    }).catchError((e) {
+      debugPrint('[VideoViewer] Erreur initialisation: $e');
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _initialized = false;
+        });
+      }
+    });
+    _ctrl!.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
-    _ctrl.removeListener(_listener);
-    _ctrl.dispose();
+    _ctrl?.dispose();
     super.dispose();
   }
 
@@ -63,7 +74,7 @@ class _VideoViewerScreenState extends State<VideoViewerScreen> {
     if (path != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Vidéo sauvegardée'),
+          content: const Text('Vidéo sauvegardée dans SewaChat/Videos/'),
           backgroundColor: AppColors.forest,
           action: SnackBarAction(
             label: 'Ouvrir',
@@ -97,7 +108,8 @@ class _VideoViewerScreenState extends State<VideoViewerScreen> {
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          child:
+                              CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.download),
                   onPressed: _downloading ? null : _download,
                 ),
@@ -107,44 +119,81 @@ class _VideoViewerScreenState extends State<VideoViewerScreen> {
       body: GestureDetector(
         onTap: () => setState(() => _showControls = !_showControls),
         child: Center(
-          child: _initialized
-              ? Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    AspectRatio(
-                      aspectRatio: _ctrl.value.aspectRatio,
-                      child: VideoPlayer(_ctrl),
+          child: _hasError
+              ? _errorWidget()
+              : _initialized && _ctrl != null
+                  ? Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        AspectRatio(
+                          aspectRatio: _ctrl!.value.aspectRatio,
+                          child: VideoPlayer(_ctrl!),
+                        ),
+                        if (_showControls) _controlsBar(),
+                      ],
+                    )
+                  : const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: Colors.white),
+                        SizedBox(height: 16),
+                        Text(
+                          'Chargement de la vidéo…',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ],
                     ),
-                    if (_showControls) _controlsBar(),
-                  ],
-                )
-              : const CircularProgressIndicator(color: Colors.white),
         ),
       ),
     );
   }
 
-  Widget _controlsBar() {
-    final position = _ctrl.value.position;
-    final duration = _ctrl.value.duration;
+  /// Widget d'erreur avec bouton de téléchargement de repli.
+  Widget _errorWidget() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Bouton play/pause
+        const Icon(Icons.error_outline, size: 56, color: Colors.white54),
+        const SizedBox(height: 12),
+        const Text(
+          'Lecture impossible',
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Télécharge la vidéo pour la lire avec une autre application.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white54, fontSize: 13),
+        ),
+        const SizedBox(height: 20),
+        ElevatedButton.icon(
+          onPressed: _downloading ? null : _download,
+          icon: const Icon(Icons.download),
+          label: const Text('Télécharger'),
+        ),
+      ],
+    );
+  }
+
+  Widget _controlsBar() {
+    final position = _ctrl!.value.position;
+    final duration = _ctrl!.value.duration;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         IconButton(
           icon: Icon(
-            _ctrl.value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+            _ctrl!.value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
             color: Colors.white,
             size: 56,
           ),
           onPressed: () {
             setState(() {
-              _ctrl.value.isPlaying ? _ctrl.pause() : _ctrl.play();
+              _ctrl!.value.isPlaying ? _ctrl!.pause() : _ctrl!.play();
             });
           },
         ),
         const SizedBox(height: 8),
-        // Barre de progression
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Row(
@@ -153,7 +202,7 @@ class _VideoViewerScreenState extends State<VideoViewerScreen> {
                   style: const TextStyle(color: Colors.white, fontSize: 12)),
               Expanded(
                 child: VideoProgressIndicator(
-                  _ctrl,
+                  _ctrl!,
                   allowScrubbing: true,
                   colors: VideoProgressColors(
                     playedColor: AppColors.terracotta,

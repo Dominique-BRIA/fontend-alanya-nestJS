@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,29 +8,48 @@ import 'package:url_launcher/url_launcher.dart';
 /// Télécharge un média depuis une URL authentifiée, l'enregistre dans le dossier
 /// « SewaChat » de l'appareil (organisé par type), puis l'ouvre.
 ///
-/// Sur Android : utilise le stockage externe de l'app (getExternalStorageDirectory)
-/// car getDownloadsDirectory() retourne null sur Android.
+/// [url] doit inclure le token d'authentification (?token=...).
+/// [filename] sert à déterminer le type et le nom du fichier.
+/// Retourne le chemin local du fichier sauvegardé (null en cas d'échec).
 Future<String?> downloadUrl(String url, String filename) async {
   try {
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode != 200) return null;
-    final bytes = response.bodyBytes;
+    debugPrint('[SewaChat] Téléchargement: $filename depuis $url');
 
+    // 1) Télécharge les octets depuis le serveur.
+    final response = await http.get(Uri.parse(url));
+    debugPrint('[SewaChat] Statut HTTP: ${response.statusCode}');
+
+    if (response.statusCode != 200) {
+      debugPrint('[SewaChat] Échec téléchargement: HTTP ${response.statusCode}');
+      return null;
+    }
+    final bytes = response.bodyBytes;
+    debugPrint('[SewaChat] Téléchargé: ${bytes.length} octets');
+
+    // 2) Détermine le sous-dossier selon le type de fichier.
     final ext = _ext(filename).toLowerCase();
     final subfolder = _subfolderFor(ext);
 
+    // 3) Crée le dossier SewaChat/{sous-dossier}.
     final baseDir = await _getBaseDir();
     final dir = Directory('${baseDir.path}/SewaChat/$subfolder');
     if (!await dir.exists()) {
       await dir.create(recursive: true);
+      debugPrint('[SewaChat] Dossier créé: ${dir.path}');
     }
 
+    // 4) Évite d'écraser un fichier existant.
     final savedPath = await _uniquePath(dir.path, filename);
-    await File(savedPath).writeAsBytes(bytes);
+    final file = File(savedPath);
+    await file.writeAsBytes(bytes);
+    debugPrint('[SewaChat] Fichier sauvegardé: $savedPath');
 
+    // 5) Tente d'ouvrir le fichier.
     await _openFile(savedPath);
+
     return savedPath;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('[SewaChat] Erreur téléchargement: $e');
     return null;
   }
 }
@@ -37,8 +57,13 @@ Future<String?> downloadUrl(String url, String filename) async {
 /// Télécharge uniquement (sans ouvrir). Retourne le chemin local ou null.
 Future<String?> downloadOnly(String url, String filename) async {
   try {
+    debugPrint('[SewaChat] Téléchargement (sans ouverture): $filename');
+
     final response = await http.get(Uri.parse(url));
-    if (response.statusCode != 200) return null;
+    if (response.statusCode != 200) {
+      debugPrint('[SewaChat] Échec: HTTP ${response.statusCode}');
+      return null;
+    }
     final bytes = response.bodyBytes;
 
     final ext = _ext(filename).toLowerCase();
@@ -52,8 +77,10 @@ Future<String?> downloadOnly(String url, String filename) async {
 
     final savedPath = await _uniquePath(dir.path, filename);
     await File(savedPath).writeAsBytes(bytes);
+    debugPrint('[SewaChat] Sauvegardé: $savedPath');
     return savedPath;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('[SewaChat] Erreur: $e');
     return null;
   }
 }
@@ -93,11 +120,9 @@ String _subfolderFor(String ext) {
 }
 
 /// Répertoire de base selon la plateforme.
-/// Android : getExternalStorageDirectory() (stockage externe de l'app, toujours accessible).
-/// iOS/Desktop : getDownloadsDirectory() ou getApplicationDocumentsDirectory() en repli.
 Future<Directory> _getBaseDir() async {
   if (Platform.isAndroid) {
-    // getDownloadsDirectory() retourne null sur Android.
+    // getExternalStorageDirectory() → /storage/emulated/0/Android/data/<pkg>/files
     final external = await getExternalStorageDirectory();
     if (external != null) return external;
     final docs = await getApplicationDocumentsDirectory();
@@ -116,18 +141,25 @@ Future<String> _uniquePath(String dirPath, String filename) async {
   var candidate = '$dirPath/$filename';
   var counter = 1;
   while (await File(candidate).exists()) {
-    final suffix = ext.isNotEmpty ? '$nameWithoutExt($counter).$ext' : '$nameWithoutExt($counter)';
+    final suffix =
+        ext.isNotEmpty ? '$nameWithoutExt($counter).$ext' : '$nameWithoutExt($counter)';
     candidate = '$dirPath/$suffix';
     counter++;
   }
   return candidate;
 }
 
+/// Ouvre un fichier avec l'application par défaut du système.
+/// Sur Android, url_launcher utilise le FileProvider configuré dans AndroidManifest.
 Future<void> _openFile(String path) async {
-  final uri = Uri.file(path);
   try {
+    final uri = Uri.file(path);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      debugPrint('[SewaChat] Impossible d\'ouvrir: $path (canLaunchUrl=false)');
     }
-  } catch (_) {}
+  } catch (e) {
+    debugPrint('[SewaChat] Erreur ouverture fichier: $e');
+  }
 }
