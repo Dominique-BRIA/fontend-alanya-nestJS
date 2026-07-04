@@ -774,9 +774,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _download(MessageMedia m) async {
     // Token frais obligatoire : l'ancien peut être expiré après 15 min.
     final token = await _freshToken();
-    final downloadUrl = "$_baseUrl${m.url}?download=1&token=$token";
+    final url = "$_baseUrl${m.url}?download=1&token=$token";
     final name = m.filename ?? "fichier-${m.id}";
-    final path = await downloadUrl(downloadUrl, name);
+    final path = await downloadUrl(url, name);
     if (!mounted) return;
     if (path != null) {
       showAppSnackBar("Sauvegardé dans SewaChat/ : $name");
