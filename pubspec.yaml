@@ -40,6 +40,8 @@ dependencies:
   pin_code_fields: ^8.0.1
   # Internationalisation / préférences
   shared_preferences: ^2.2.3
+  # Notifications locales (canaux + permissions Android)
+  flutter_local_notifications: ^18.0.1
   # Base de données locale (cache des messages hors ligne)
   sqflite: ^2.4.1
   path: ^1.9.0

@@ -758,14 +758,25 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Récupère un token FRAIS depuis le stockage sécurisé.
+  /// Le token d'accès expire après 15 min — il faut le rafraîchir avant chaque
+  /// opération média (téléchargement, lecture image/vidéo) sinon l'API répond 401.
+  Future<String> _freshToken() async {
+    _token = await context.read<TokenStorage>().accessToken;
+    return _token ?? '';
+  }
+
   String _mediaUrl(MessageMedia m) => "$_baseUrl${m.url}?token=${_token ?? ''}";
 
   String _downloadUrl(MessageMedia m) =>
       "$_baseUrl${m.url}?download=1&token=${_token ?? ''}";
 
   Future<void> _download(MessageMedia m) async {
+    // Token frais obligatoire : l'ancien peut être expiré après 15 min.
+    final token = await _freshToken();
+    final downloadUrl = "$_baseUrl${m.url}?download=1&token=$token";
     final name = m.filename ?? "fichier-${m.id}";
-    final path = await downloadUrl(_downloadUrl(m), name);
+    final path = await downloadUrl(downloadUrl, name);
     if (!mounted) return;
     if (path != null) {
       showAppSnackBar("Sauvegardé dans SewaChat/ : $name");
@@ -775,14 +786,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// Ouvre une image en plein écran (visionneuse avec zoom + téléchargement).
-  void _openImageViewer(Message m) {
+  Future<void> _openImageViewer(Message m) async {
+    final token = await _freshToken();
     final media = m.media.first;
     final name = media.filename ?? "image-${media.id}";
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ImageViewerScreen(
-          imageUrl: "$_baseUrl${media.url}?token=${_token ?? ''}",
-          downloadUrl: _downloadUrl(media),
+          imageUrl: "$_baseUrl${media.url}?token=$token",
+          downloadUrl: "$_baseUrl${media.url}?download=1&token=$token",
           filename: name,
         ),
       ),
@@ -790,14 +803,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// Ouvre une vidéo dans le lecteur vidéo intégré (plein écran).
-  void _openVideoViewer(Message m) {
+  Future<void> _openVideoViewer(Message m) async {
+    final token = await _freshToken();
     final media = m.media.first;
     final name = media.filename ?? "video-${media.id}";
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => VideoViewerScreen(
-          videoUrl: "$_baseUrl${media.url}?token=${_token ?? ''}",
-          downloadUrl: _downloadUrl(media),
+          videoUrl: "$_baseUrl${media.url}?token=$token",
+          downloadUrl: "$_baseUrl${media.url}?download=1&token=$token",
           filename: name,
         ),
       ),

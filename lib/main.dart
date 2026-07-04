@@ -22,12 +22,17 @@ import 'features/media/media_repository.dart';
 import 'features/status/status_repository.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
   final api = ApiClient();
   final storage = TokenStorage();
   final repo = AuthRepository(api);
   final authedApi = AuthedApi(api, storage);
   final realtime = RealtimeClient(storage);
+
+  // Initialise les notifications (crée le canal + demande la permission).
+  await PushService.instance.tryInitialize();
 
   runApp(
     MultiProvider(
