@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/api_client.dart';
 import '../../core/message_cache.dart';
+import '../../core/push_service.dart';
 import '../../core/token_storage.dart';
 import '../../models/auth_user.dart';
 import 'auth_repository.dart';
@@ -109,6 +110,8 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // Désenregistre le token FCM avant de nettoyer les tokens locaux
+    await PushService.instance.unregister();
     final refresh = await _storage.refreshToken;
     if (refresh != null) {
       try {
@@ -130,6 +133,9 @@ class AuthController extends ChangeNotifier {
     await _saveUserCache(session.user);
     user = session.user;
     _set(AuthStatus.authenticated, session.user);
+    // Ré-enregistre le token FCM : maintenant qu'on est authentifié,
+    // le backend peut associer le token à l'utilisateur.
+    PushService.instance.tryInitialize();
   }
 
   Future<void> _saveUserCache(AuthUser u) async {

@@ -31,8 +31,9 @@ void main() async {
   final authedApi = AuthedApi(api, storage);
   final realtime = RealtimeClient(storage);
 
-  // Initialise les notifications (crée le canal + demande la permission).
-  await PushService.instance.tryInitialize();
+  // Initialise les notifications push FCM (crée le canal + demande la permission
+  // + enregistre le token auprès du backend).
+  await PushService.instance.tryInitialize(api: api, storage: storage);
 
   runApp(
     MultiProvider(

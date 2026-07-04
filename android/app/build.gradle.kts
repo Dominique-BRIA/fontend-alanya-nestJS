@@ -2,6 +2,8 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
+    // Plugin Firebase Google Services (pour les notifications push FCM)
+    id("com.google.gms.google-services")
 }
 
 android {
