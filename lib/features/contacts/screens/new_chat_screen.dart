@@ -13,7 +13,7 @@ import '../contacts_repository.dart';
 
 /// Ajout d'un contact + démarrage d'une discussion (style WhatsApp).
 ///
-/// Formulaire simple : nom (optionnel) + numéro Alanya à 6 chiffres + bouton
+/// Formulaire simple : nom (optionnel) + numéro Alanya à 6 ou 8 chiffres + bouton
 /// « Enregistrer ». Si le numéro n'existe pas, on affiche une erreur claire.
 /// Si l'utilisateur est déjà un contact, on ouvre directement le chat.
 class NewChatScreen extends StatefulWidget {
@@ -37,8 +37,8 @@ class _NewChatScreenState extends State<NewChatScreen> {
   }
 
   bool get _isNumberValid =>
-      _numberCtrl.text.trim().length == 6 &&
-      RegExp(r'^\d{6}$').hasMatch(_numberCtrl.text.trim());
+      (_numberCtrl.text.trim().length == 6 || _numberCtrl.text.trim().length == 8) &&
+      RegExp(r'^(\d{6}|\d{8})$').hasMatch(_numberCtrl.text.trim());
 
   /// Enregistrer le contact puis ouvrir la discussion.
   Future<void> _save() async {
@@ -46,7 +46,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
 
     // Validation locale du numéro.
     if (!_isNumberValid) {
-      setState(() => _numberError = "Le numéro Alanya doit comporter 6 chiffres");
+      setState(() => _numberError = "Le numéro Alanya doit comporter 6 ou 8 chiffres");
       return;
     }
     setState(() {
@@ -144,11 +144,11 @@ class _NewChatScreenState extends State<NewChatScreen> {
               TextField(
                 controller: _numberCtrl,
                 keyboardType: TextInputType.number,
-                maxLength: 6,
+                maxLength: 8,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: InputDecoration(
                   labelText: "Numéro Alanya",
-                  hintText: "6 chiffres",
+                  hintText: "6 ou 8 chiffres",
                   prefixIcon: const Icon(Icons.tag),
                   counterText: "",
                   errorText: _numberError,

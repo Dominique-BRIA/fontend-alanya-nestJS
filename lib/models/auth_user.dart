@@ -2,7 +2,7 @@
 class AuthUser {
   final String id;
   final String email;
-  final String publicNumber; // numéro public à 6 chiffres
+  final String publicNumber; // numéro public à 6 ou 8 chiffres
   final String? pseudo;
   final String? avatarUrl;
   final String? statusMsg;

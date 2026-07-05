@@ -35,9 +35,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
   Future<void> _search() async {
     final number = _numberCtrl.text.trim();
-    final isValid = number.length == 6 && RegExp(r'^\d{6}$').hasMatch(number);
+    final isValid = (number.length == 6 || number.length == 8) && RegExp(r'^(\d{6}|\d{8})$').hasMatch(number);
     if (!isValid) {
-      setState(() => _error = "Entre un numéro Alanya valide (6 chiffres)");
+      setState(() => _error = "Entre un numéro Alanya valide (6 ou 8 chiffres)");
       return;
     }
     setState(() {
@@ -133,7 +133,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                "Chaque utilisateur a un numéro public à 6 chiffres (comme un numéro de téléphone).",
+                "Chaque utilisateur a un numéro public à 6 ou 8 chiffres (comme un numéro de téléphone).",
                 style: TextStyle(color: Colors.black54),
               ),
               const SizedBox(height: 16),
@@ -143,10 +143,10 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     child: TextField(
                       controller: _numberCtrl,
                       keyboardType: TextInputType.number,
-                      maxLength: 6,
+                      maxLength: 8,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: const InputDecoration(
-                        labelText: "Numéro (6 chiffres)",
+                        labelText: "Numéro (6 ou 8 chiffres)",
                         counterText: "",
                         prefixIcon: Icon(Icons.tag),
                       ),

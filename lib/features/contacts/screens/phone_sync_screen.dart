@@ -10,7 +10,7 @@ import '../contacts_repository.dart';
 import '../services/phone_sync_service.dart';
 
 /// Écran de synchronisation du répertoire téléphonique.
-/// Scanne les contacts du téléphone, détecte les numéros Alanya (6 chiffres),
+/// Scanne les contacts du téléphone, détecte les numéros Alanya (6 ou 8 chiffres),
 /// vérifie lesquels ont un compte, et permet de les ajouter en un tap.
 class PhoneSyncScreen extends StatefulWidget {
   const PhoneSyncScreen({super.key});
@@ -149,7 +149,7 @@ class _PhoneSyncScreenState extends State<PhoneSyncScreen> {
         return _messageView(
           icon: Icons.search_off,
           title: "Aucun numéro Alanya détecté",
-          subtitle: "Aucun de tes contacts n'a de numéro à 6 chiffres dans son profil.\nLes numéros Alanya sont des numéros à 6 chiffres (ex: 123456).",
+          subtitle: "Aucun de tes contacts n'a de numéro à 6 chiffres dans son profil.\nLes numéros Alanya sont des numéros à 6 ou 8 chiffres (ex: 123456 ou 12345678).",
           action: _retryButton(),
         );
       case PhoneSyncStatus.noMatches:
@@ -195,13 +195,13 @@ class _PhoneSyncScreenState extends State<PhoneSyncScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              "Alanya va scanner ton répertoire téléphonique, extraire les numéros à 6 chiffres et vérifier lesquels ont un compte.",
+              "Alanya va scanner ton répertoire téléphonique, extraire les numéros à 6 ou 8 chiffres et vérifier lesquels ont un compte.",
               style: TextStyle(color: Colors.black54, height: 1.5),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             const Text(
-              "Aucune donnée n'est stockée. Seuls les numéros à 6 chiffres sont envoyés au serveur.",
+              "Aucune donnée n'est stockée. Seuls les numéros à 6 ou 8 chiffres sont envoyés au serveur.",
               style: TextStyle(color: Colors.black38, fontSize: 12, height: 1.5),
               textAlign: TextAlign.center,
             ),

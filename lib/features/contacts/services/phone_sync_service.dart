@@ -18,7 +18,7 @@ class PhoneContactMatch {
 /// Service qui :
 /// 1. Demande la permission d'accès aux contacts
 /// 2. Lit le répertoire téléphonique natif
-/// 3. Extrait tous les numéros à 6 chiffres (en supprimant espaces/tirets)
+/// 3. Extrait tous les numéros à 6 ou 8 chiffres (en supprimant espaces/tirets)
 /// 4. Envoie une requête batch au backend pour savoir lesquels sont sur Alanya
 /// 5. Renvoie la liste des correspondances
 class PhoneSyncService {
@@ -67,10 +67,10 @@ class PhoneSyncService {
       return PhoneSyncResult.empty();
     }
 
-    // 3. Extraction des numéros à 6 chiffres
+    // 3. Extraction des numéros à 6 ou 8 chiffres
     onProgress?.call("Analyse des ${phoneContacts.length} contacts…");
     final Map<String, String> numberToName = {}; // numéro → nom affiché
-    final _sixDigits = RegExp(r'^\d{6}$');
+    final _sixDigits = RegExp(r'^(\d{6}|\d{8})$');
 
     for (final contact in phoneContacts) {
       final displayName = contact.displayName.trim();
@@ -81,7 +81,7 @@ class PhoneSyncService {
             .replaceAll(RegExp(r'[\s\-\(\)\+]'), '')
             .trim();
 
-        // Ne garde que les chaînes de exactement 6 chiffres
+        // Ne garde que les chaînes de exactement 6 ou 8 chiffres
         if (_sixDigits.hasMatch(cleaned)) {
           // Si plusieurs contacts ont le même numéro, on garde le premier nom trouvé
           numberToName.putIfAbsent(cleaned, () => displayName.isNotEmpty ? displayName : cleaned);
