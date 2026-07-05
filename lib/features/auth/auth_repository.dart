@@ -67,6 +67,24 @@ class AuthRepository {
     return _session(data);
   }
 
+  /// Mot de passe oublié : déclenche l'envoi du code OTP.
+  Future<void> forgotPassword(String email) async {
+    await _api.post("/api/auth/forgot-password", {"email": email});
+  }
+
+  /// Réinitialisation du mot de passe avec le code OTP.
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _api.post("/api/auth/reset-password", {
+      "email": email,
+      "code": code,
+      "password": newPassword,
+    });
+  }
+
   Future<AuthUser> me(String accessToken) async {
     final data = await _api.get("/api/me", bearer: accessToken);
     return AuthUser.fromJson(data);

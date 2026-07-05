@@ -7,6 +7,8 @@ import '../../../core/app_snackbar.dart';
 import '../../../widgets/back_app_bar.dart';
 import '../auth_controller.dart';
 import '../auth_repository.dart';
+import 'forgot_password_screen.dart';
+import '../../../theme/app_theme.dart';
 
 /// Connexion par email OU numéro public à 6 chiffres + mot de passe.
 class LoginScreen extends StatefulWidget {
@@ -105,6 +107,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         )
                       : Text(tr(context, 'sign_in')),
+                ),
+                const SizedBox(height: 16),
+                // Lien mot de passe oublié
+                Align(
+                  alignment: Alignment.center,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ForgotPasswordScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "Mot de passe oublié ?",
+                      style: TextStyle(color: AppColors.terracotta),
+                    ),
+                  ),
                 ),
               ],
             ),
