@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../core/push_service.dart';
 import '../../core/realtime_client.dart';
 import '../../models/ai_message.dart';
 import '../../models/conversation.dart';
@@ -144,13 +145,72 @@ class _ConversationsTabState extends State<_ConversationsTab> {
   void initState() {
     super.initState();
     _load();
-    // Rafraîchit immédiatement la liste à chaque événement temps réel.
+    // Rafraîchit la liste + affiche une notification locale pour les nouveaux messages.
     _rtSub = context.read<RealtimeClient>().events.listen((e) {
       final t = e["type"];
-      if (t == "message" || t == "read") _poll();
+      if (t == "message") {
+        _poll();
+        // Notification locale si l'utilisateur n'est PAS dans cette conversation
+        final msg = e["message"] as Map<String, dynamic>?;
+        final convId = msg?["convId"] as String?;
+        final senderId = msg?["senderId"] as String?;
+        final myId = context.read<AuthController>().user?.id;
+        // Ne pas notifier si c'est mon propre message OU si je suis dans cette conv
+        if (senderId != myId && convId != null && convId != ChatScreen.activeConvId) {
+          _showMessageNotification(e);
+        }
+      } else if (t == "read") {
+        _poll();
+      }
     });
     // Rafraîchissement de repli (dernier message, non-lus) si le WS est coupé.
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
+  }
+
+  /// Affiche une notification locale pour un message entrant.
+  void _showMessageNotification(Map<String, dynamic> e) {
+    final msg = e["message"] as Map<String, dynamic>?;
+    if (msg == null) return;
+
+    final convId = msg["convId"] as String? ?? "";
+    final content = msg["content"] as String?;
+    final type = msg["type"] as String? ?? "TEXT";
+
+    // Trouve le titre de la conversation (expéditeur)
+    String title = "Nouveau message";
+    for (final c in _convs ?? <Conversation>[]) {
+      if (c.id == convId) {
+        title = c.title ?? "Discussion";
+        break;
+      }
+    }
+
+    // Aperçu du message selon le type
+    String body;
+    switch (type) {
+      case "IMAGE":
+        body = "🖼️ Image";
+        break;
+      case "AUDIO":
+        body = "🎤 Message vocal";
+        break;
+      case "FILE":
+        body = "📎 Fichier";
+        break;
+      case "VIDEO":
+        body = "🎥 Vidéo";
+        break;
+      default:
+        body = content ?? "Nouveau message";
+    }
+
+    // Affiche la notification locale
+    PushService.instance.show(
+      title: title,
+      body: body,
+      id: convId.hashCode,
+      payload: {"type": "message", "convId": convId},
+    );
   }
 
   @override

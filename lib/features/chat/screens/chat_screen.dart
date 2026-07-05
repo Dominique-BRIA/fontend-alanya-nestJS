@@ -34,6 +34,10 @@ import 'image_viewer_screen.dart';
 import 'video_viewer_screen.dart';
 
 class ChatScreen extends StatefulWidget {
+  /// ID de la conversation actuellement ouverte (null si aucune).
+  /// Utilisé pour éviter les notifications locales quand on lit déjà la conv.
+  static String? activeConvId;
+
   const ChatScreen({
     super.key,
     required this.convId,
@@ -87,6 +91,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    ChatScreen.activeConvId = widget.convId; // marque cette conv comme "active"
     _load();
     final rt = context.read<RealtimeClient>();
     rt.connect(); // au cas où la connexion ne serait pas encore ouverte
@@ -97,6 +102,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    ChatScreen.activeConvId = null; // plus aucune conv active
     _pollTimer?.cancel();
     _recordTimer?.cancel();
     _rtSub?.cancel();
