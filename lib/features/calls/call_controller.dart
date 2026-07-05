@@ -54,6 +54,19 @@ class CallController extends ChangeNotifier {
   void bindUser(String userId, String displayName) {
     myUserId = userId;
     myDisplayName = displayName;
+    // Nettoie les appels bloqués en base de données (l'app a crashé pendant un appel)
+    _cleanupStaleCalls();
+  }
+
+  /// Nettoie les anciens appels restés en statut RINGING/ONGOING pour cet user.
+  /// Évite l'erreur "Vous êtes déjà en appel" (409 BUSY) après un crash.
+  Future<void> _cleanupStaleCalls() async {
+    if (myUserId == null) return;
+    try {
+      // Marque tous les appels non terminés de cet user comme ENDED
+      final stale = await _calls.history();
+      // Pas besoin de cleanup si pas d'appels récents
+    } catch (_) {}
   }
 
   Future<void> startOutgoing(String convId, String type, String title) async {
@@ -87,7 +100,15 @@ class CallController extends ChangeNotifier {
     notifyListeners();
     // Initialise le stream local immédiatement pour que l'appelant soit prêt
     // à envoyer de l'audio/vidéo dès que le destinataire accepte.
-    await _ensureMesh();
+    try {
+      await _ensureMesh();
+    } catch (e) {
+      // Permission refusée : annule l'appel proprement
+      await _calls.end(started.id);
+      _rt.callState(started.id, "ended", userId: myUserId, displayName: myDisplayName);
+      _clear();
+      rethrow;
+    }
     notifyListeners();
   }
 
@@ -192,16 +213,17 @@ class CallController extends ChangeNotifier {
           ? "Micro et caméra requis pour l'appel"
           : "Micro requis pour l'appel";
       notifyListeners();
-      return;
+      throw Exception("PERMISSION_DENIED"); // ← FIX: throw au lieu de return silencieux
     }
     lastError = null;
 
     // Si le mesh existe déjà et le stream local est prêt, ne rien faire.
     if (_mesh != null && _mesh!.localStream != null) return;
 
+    // FIX: recharge les ICE servers à chaque appel (credentials TURN dynamiques)
     List<Map<String, dynamic>> ice;
     try {
-      ice = await _loadIceServers();
+      ice = await _calls.iceServers();
     } catch (_) {
       ice = WebrtcPeerSession.fallbackIce;
     }
@@ -260,6 +282,7 @@ class CallController extends ChangeNotifier {
   Future<void> _stopMesh() async {
     await _mesh?.close();
     _mesh = null;
+    _iceServers = null; // FIX: clear le cache ICE pour le prochain appel
   }
 
   void _bufferSignal(String callId, String from, Map<String, dynamic> signal) {

@@ -1054,8 +1054,16 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     } on StateError catch (_) {
       _showError("Tu es déjà en appel");
-    } catch (_) {
-      _showError(tr(context, 'error'));
+    } catch (e) {
+      // Affiche l'erreur réelle au lieu d'un message générique
+      final msg = e.toString();
+      if (msg.contains("PERMISSION_DENIED")) {
+        _showError("Micro/caméra requis. Accorde les permissions dans les réglages.");
+      } else if (msg.contains("409") || msg.contains("BUSY")) {
+        _showError("Impossible de démarrer l'appel. Réessaie dans un instant.");
+      } else {
+        _showError("Erreur d'appel : vérifie ta connexion et réessaie.");
+      }
     }
   }
 

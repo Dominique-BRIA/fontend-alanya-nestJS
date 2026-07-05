@@ -27,6 +27,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   bool _popping = false;
   bool _actionBusy = false;
 
+  Timer? _connectTimeout;
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +38,15 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
       final cc = _calls;
       if (cc != null && cc.activeRole == ActiveCallRole.ongoing) {
         setState(() => _elapsed++);
+      }
+    });
+    // Timeout : si la connexion WebRTC n'est pas établie après 30s, raccroche
+    _connectTimeout = Timer(const Duration(seconds: 30), () {
+      if (!mounted) return;
+      final cc = _calls;
+      if (cc != null && cc.activeRole == ActiveCallRole.ongoing && !cc.mediaConnected) {
+        showAppSnackBar("Connexion impossible. Vérifie ta connexion réseau.");
+        _hangUp(cc);
       }
     });
   }
@@ -155,6 +166,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _connectTimeout?.cancel();
     _calls?.removeListener(_onCallChanged);
     _localRenderer.dispose();
     for (final r in _remoteRenderers.values) {
