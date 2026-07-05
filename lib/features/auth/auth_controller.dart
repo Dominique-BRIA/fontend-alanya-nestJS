@@ -135,7 +135,7 @@ class AuthController extends ChangeNotifier {
     _set(AuthStatus.authenticated, session.user);
     // Ré-enregistre le token FCM : maintenant qu'on est authentifié,
     // le backend peut associer le token à l'utilisateur.
-    PushService.instance.tryInitialize();
+    PushService.instance.registerTokenIfAuthenticated();
   }
 
   Future<void> _saveUserCache(AuthUser u) async {
@@ -153,8 +153,15 @@ class AuthController extends ChangeNotifier {
   }
 
   void _set(AuthStatus s, AuthUser? u) {
+    final wasAuth = status == AuthStatus.authenticated;
     status = s;
     user = u;
     notifyListeners();
+    // Déclenche l'enregistrement du token FCM dès qu'on devient authentifié.
+    // Corrige le bug de timing : le token n'était jamais enregistré car
+    // tryInitialize() s'exécutait avant l'authentification.
+    if (s == AuthStatus.authenticated && !wasAuth) {
+      PushService.instance.registerTokenIfAuthenticated();
+    }
   }
 }
