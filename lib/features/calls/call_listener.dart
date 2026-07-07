@@ -19,6 +19,9 @@ class _CallListenerState extends State<CallListener> {
   @override
   Widget build(BuildContext context) {
     final cc = context.watch<CallController>();
+    if (cc.incoming != null) {
+      debugPrint("[CallListener] cc.incoming n'est pas nul ! Ouverture de l'écran d'appel...");
+    }
     if (cc.incoming != null && !_incomingRouteOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted || cc.incoming == null) return;

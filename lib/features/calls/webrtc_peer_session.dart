@@ -59,24 +59,13 @@ class WebrtcPeerSession {
   }
 
   static const fallbackIce = [
-    {"urls": "stun:stun.l.google.com:19302"},
-    {"urls": "stun:stun1.l.google.com:19302"},
-    {"urls": "stun:stun.cloudflare.com:3478"},
-    // TURN gratuit OpenRelay (requis pour traverser les NAT symétriques en 4G/5G)
     {
-      "urls": "turn:openrelay.metered.ca:80",
-      "username": "openrelayproject",
-      "credential": "openrelayproject",
-    },
-    {
-      "urls": "turn:openrelay.metered.ca:443",
-      "username": "openrelayproject",
-      "credential": "openrelayproject",
-    },
-    {
-      "urls": "turn:openrelay.metered.ca:443?transport=tcp",
-      "username": "openrelayproject",
-      "credential": "openrelayproject",
+      "urls": [
+        "stun:76.13.44.253:3478",
+        "turn:76.13.44.253:3478?transport=tcp",
+      ],
+      "username": "alanya", // identifiants générés par le dashboard Metered
+      "credential": "alanya2026",
     },
   ];
 

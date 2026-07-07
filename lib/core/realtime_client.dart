@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show ChangeNotifier;
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'server_config.dart';
@@ -58,7 +58,12 @@ class RealtimeClient extends ChangeNotifier {
   void _onData(dynamic raw) {
     try {
       final decoded = jsonDecode(raw as String);
-      if (decoded is Map<String, dynamic>) _controller.add(decoded);
+      if (decoded is Map<String, dynamic>) {
+        if (decoded["type"] == "incoming_call") {
+          debugPrint("[RealtimeClient] Trame incoming_call reçue du serveur !");
+        }
+        _controller.add(decoded);
+      }
     } catch (_) {
       // ignore les trames non-JSON
     }

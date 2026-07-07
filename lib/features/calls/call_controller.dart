@@ -77,6 +77,7 @@ class CallController extends ChangeNotifier {
     }
     lastError = null;
     final started = await _calls.start(convId, type);
+    debugPrint("[CallController] Appel créé sur le backend, envoi du signal call_ring...");
     _rt.callRing(started.id);
     activeCallId = started.id;
     activeConvId = convId;
@@ -220,13 +221,9 @@ class CallController extends ChangeNotifier {
     // Si le mesh existe déjà et le stream local est prêt, ne rien faire.
     if (_mesh != null && _mesh!.localStream != null) return;
 
-    // FIX: recharge les ICE servers à chaque appel (credentials TURN dynamiques)
-    List<Map<String, dynamic>> ice;
-    try {
-      ice = await _calls.iceServers();
-    } catch (_) {
-      ice = WebrtcPeerSession.fallbackIce;
-    }
+    // FIX: utilise directement les serveurs ICE codés en dur dans l'application.
+    // Plus d'appel réseau vers le backend pour récupérer /api/calls/ice.
+    final ice = WebrtcPeerSession.fallbackIce;
 
     // Réinitialise si la mesh précédente était en erreur
     if (_mesh == null) {
@@ -292,8 +289,10 @@ class CallController extends ChangeNotifier {
 
   Future<void> _onEvent(Map<String, dynamic> e) async {
     final type = e["type"];
+    debugPrint("[CallController] Événement reçu: $type");
     if (type == "incoming_call") {
       final callId = e["callId"] as String;
+      debugPrint("[CallController] 📞 APPEL ENTRANT de ${e["callerName"]} !");
       incoming = IncomingCallInfo(
         callId: callId,
         convId: e["convId"] as String?,
