@@ -2,19 +2,16 @@ import 'package:flutter/foundation.dart';
 
 class ServerConfig {
   // URL du backend Next.js (Vercel)
+  // On force l'URL de production même en Debug pour pouvoir tester sur des vrais téléphones.
   static const String apiBase = String.fromEnvironment(
     'API_URL',
-    defaultValue: kReleaseMode
-        ? "https://backend-alanya.vercel.app"
-        : "http://10.0.2.2:3000",
+    defaultValue: "https://backend-alanya.vercel.app",
   );
 
   // URL du serveur WebSocket (Render)
-  // En release, on force wss:// ; en debug, ws:// local sur l'émulateur Android.
+  // On force l'URL WSS de production même en Debug pour que les appels WebRTC fonctionnent sur des vrais téléphones.
   static const String wsBase = String.fromEnvironment(
     'WS_URL',
-    defaultValue: kReleaseMode
-        ? "wss://alanya-ws.onrender.com"
-        : "ws://10.0.2.2:3001",
+    defaultValue: "wss://alanya-ws.onrender.com",
   );
 }
