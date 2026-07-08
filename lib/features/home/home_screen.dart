@@ -11,7 +11,9 @@ import '../../models/ai_message.dart';
 import '../../models/conversation.dart';
 import '../../models/status.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/avatar_circle.dart';
 import '../../widgets/motif_background.dart';
+import '../account/screens/avatar_viewer_screen.dart';
 import '../account/screens/profile_screen.dart';
 import '../ai/ai_repository.dart';
 import '../auth/auth_controller.dart';
@@ -268,9 +270,19 @@ class _ConversationsTabState extends State<_ConversationsTab> {
               ),
               child: Row(
                 children: [
-                  const CircleAvatar(
+                  AvatarCircle(
+                    name: user.pseudo ?? "?",
+                    avatarUrl: user.avatarUrl,
+                    radius: 22,
                     backgroundColor: AppColors.terracotta,
-                    child: Icon(Icons.person, color: Colors.white),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AvatarViewerScreen(
+                          name: user.pseudo ?? "Moi",
+                          avatarUrl: user.avatarUrl,
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -343,14 +355,28 @@ class _ConversationsTabState extends State<_ConversationsTab> {
                     ? "📎 Fichier"
                     : (last.content ?? "[${last.type}]"));
     final title = c.title ?? "Discussion";
+    // Pour un DM, trouve le membre "autre que moi" pour connaître son userId
+    // et son numéro (utile côté ChatScreen pour ouvrir ContactInfoScreen).
+    final myId = context.read<AuthController>().user?.id;
+    final other = c.isGroup
+        ? null
+        : c.members.firstWhere(
+            (m) => m.id != myId,
+            orElse: () => c.members.isNotEmpty ? c.members.first : c.members.first,
+          );
+
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: c.isGroup ? AppColors.forest : AppColors.clay,
-        child: c.isGroup
-            ? const Icon(Icons.groups, color: Colors.white, size: 22)
-            : Text(title.isNotEmpty ? title[0].toUpperCase() : "?",
-                style: const TextStyle(color: Colors.white)),
-      ),
+      leading: c.isGroup
+          ? CircleAvatar(
+              backgroundColor: AppColors.forest,
+              child: const Icon(Icons.groups, color: Colors.white, size: 22),
+            )
+          : AvatarCircle(
+              name: title,
+              avatarUrl: c.avatarUrl,
+              radius: 22,
+              backgroundColor: AppColors.clay,
+            ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(
         c.isGroup && c.members.isNotEmpty
@@ -375,6 +401,9 @@ class _ConversationsTabState extends State<_ConversationsTab> {
               title: title,
               isGroup: c.isGroup,
               memberNames: c.memberNames,
+              avatarUrl: c.avatarUrl,
+              otherUserId: other?.id,
+              otherPublicNumber: other?.publicNumber,
             ),
           ),
         );

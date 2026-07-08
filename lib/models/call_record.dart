@@ -7,6 +7,7 @@ class CallRecord {
   final bool isGroup;
   final String peerName;
   final String? peerNumber;
+  final String? peerAvatarUrl;
   final int participantCount;
   final DateTime startedAt;
   final DateTime? answeredAt;
@@ -22,6 +23,7 @@ class CallRecord {
     required this.isGroup,
     required this.peerName,
     required this.peerNumber,
+    required this.peerAvatarUrl,
     required this.participantCount,
     required this.startedAt,
     required this.answeredAt,
@@ -38,6 +40,7 @@ class CallRecord {
         isGroup: (j["isGroup"] as bool?) ?? false,
         peerName: j["peerName"] as String? ?? "Inconnu",
         peerNumber: j["peerNumber"] as String?,
+        peerAvatarUrl: j["peerAvatarUrl"] as String?,
         participantCount: (j["participantCount"] as num?)?.toInt() ?? 2,
         startedAt: DateTime.parse(j["startedAt"] as String),
         answeredAt: j["answeredAt"] == null ? null : DateTime.parse(j["answeredAt"] as String),

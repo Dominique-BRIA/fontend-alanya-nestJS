@@ -76,6 +76,10 @@ class _NewChatScreenState extends State<NewChatScreen> {
           builder: (_) => ChatScreen(
             convId: convId,
             title: alias.isNotEmpty ? alias : (user.pseudo ?? number),
+            avatarUrl: user.avatarUrl,
+            otherUserId: user.id,
+            otherPublicNumber: user.publicNumber,
+            otherStatusMsg: user.statusMsg,
           ),
         ),
       );

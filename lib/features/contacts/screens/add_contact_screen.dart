@@ -105,6 +105,10 @@ class _AddContactScreenState extends State<AddContactScreen> {
           builder: (_) => ChatScreen(
             convId: convId,
             title: alias.isNotEmpty ? alias : (user.pseudo ?? user.publicNumber),
+            avatarUrl: user.avatarUrl,
+            otherUserId: user.id,
+            otherPublicNumber: user.publicNumber,
+            otherStatusMsg: user.statusMsg,
           ),
         ),
       );

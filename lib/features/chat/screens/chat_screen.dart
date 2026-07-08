@@ -23,11 +23,14 @@ import '../../../models/message.dart';
 import '../../../models/conversation.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/auth_network_image.dart';
+import '../../../widgets/avatar_circle.dart';
 import '../../../widgets/back_app_bar.dart';
 import '../../../widgets/motif_background.dart';
+import '../../account/screens/avatar_viewer_screen.dart';
 import '../../auth/auth_controller.dart';
 import '../../calls/call_controller.dart';
 import '../../calls/screens/active_call_screen.dart';
+import '../../contacts/screens/contact_info_screen.dart';
 import '../../media/media_repository.dart';
 import '../chat_repository.dart';
 import 'image_viewer_screen.dart';
@@ -44,11 +47,24 @@ class ChatScreen extends StatefulWidget {
     required this.title,
     this.isGroup = false,
     this.memberNames = const {},
+    this.avatarUrl,
+    this.otherUserId,
+    this.otherPublicNumber,
+    this.otherStatusMsg,
+    this.contactId,
+    this.isBlocked = false,
   });
   final String convId;
   final String title;
   final bool isGroup;
   final Map<String, String> memberNames;
+  // Champs additionnels pour l'AppBar façon WhatsApp :
+  final String? avatarUrl;      // avatar du peer (DM) ou du groupe
+  final String? otherUserId;    // id du peer (DM uniquement)
+  final String? otherPublicNumber;
+  final String? otherStatusMsg;
+  final String? contactId;      // pour ContactInfoScreen (bloquer/débloquer)
+  final bool isBlocked;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -1067,26 +1083,116 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// AppBar personnalisée façon WhatsApp :
+  /// [avatar][titre / statut clickable]  [📞][🎥]
+  ///
+  /// - Tap sur l'avatar → visualiseur plein écran
+  /// - Tap sur le nom → écran détails contact (uniquement pour DM)
+  PreferredSizeWidget _whatsappAppBar() {
+    return AppBar(
+      backgroundColor: AppColors.terracotta,
+      foregroundColor: Colors.white,
+      leadingWidth: 40,
+      titleSpacing: 0,
+      title: InkWell(
+        onTap: widget.isGroup ? null : _openContactInfo,
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: _openAvatarViewer,
+              child: AvatarCircle(
+                name: widget.title,
+                avatarUrl: widget.avatarUrl,
+                radius: 18,
+                backgroundColor: Colors.white24,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  if (!widget.isGroup && widget.otherStatusMsg?.isNotEmpty == true)
+                    Text(
+                      widget.otherStatusMsg!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11, color: Colors.white70),
+                    )
+                  else if (widget.isGroup)
+                    Text(
+                      "${widget.memberNames.length} membres",
+                      style: const TextStyle(fontSize: 11, color: Colors.white70),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        IconButton(
+          tooltip: widget.isGroup ? "Appel groupe vidéo" : "Appel vidéo",
+          icon: const Icon(Icons.videocam),
+          onPressed: () => _startCall("VIDEO"),
+        ),
+        IconButton(
+          tooltip: widget.isGroup ? "Appel groupe audio" : "Appel audio",
+          icon: const Icon(Icons.call),
+          onPressed: () => _startCall("AUDIO"),
+        ),
+      ],
+    );
+  }
+
+  void _openAvatarViewer() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AvatarViewerScreen(
+          name: widget.title,
+          avatarUrl: widget.avatarUrl,
+        ),
+      ),
+    );
+  }
+
+  void _openContactInfo() {
+    // Uniquement pour les DM (les groupes n'ont pas d'écran contact-info).
+    if (widget.isGroup) return;
+    final otherId = widget.otherUserId;
+    if (otherId == null) {
+      // Fallback : au moins ouvrir le viewer sur l'avatar
+      _openAvatarViewer();
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ContactInfoScreen(
+          userId: otherId,
+          name: widget.title,
+          publicNumber: widget.otherPublicNumber ?? "",
+          avatarUrl: widget.avatarUrl,
+          statusMsg: widget.otherStatusMsg,
+          convId: widget.convId,
+          contactId: widget.contactId,
+          isBlocked: widget.isBlocked,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final myId = context.read<AuthController>().user?.id;
     return Scaffold(
-      appBar: backAppBar(
-        context,
-        widget.title,
-        actions: [
-          IconButton(
-            tooltip: widget.isGroup ? "Appel groupe audio" : "Appel audio",
-            icon: const Icon(Icons.call),
-            onPressed: () => _startCall("AUDIO"),
-          ),
-          IconButton(
-            tooltip: widget.isGroup ? "Appel groupe vidéo" : "Appel vidéo",
-            icon: const Icon(Icons.videocam),
-            onPressed: () => _startCall("VIDEO"),
-          ),
-        ],
-      ),
+      appBar: _whatsappAppBar(),
       body: MotifBackground(
         overlayOpacity: 0.85,
         child: Column(

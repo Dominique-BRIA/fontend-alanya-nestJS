@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../models/call_record.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/avatar_circle.dart';
 import '../../../widgets/motif_background.dart';
 import '../call_controller.dart';
 import '../calls_repository.dart';
@@ -132,14 +133,17 @@ class _CallsScreenState extends State<CallsScreen> {
         : (c.status == "MISSED" ? Icons.call_missed : Icons.call_received);
     final color = c.status == "MISSED" ? Colors.red : AppColors.forest;
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: AppColors.clay,
-        child: Icon(
-          c.isGroup ? Icons.groups : (isVideo ? Icons.videocam : Icons.call),
-          color: Colors.white,
-          size: 20,
-        ),
-      ),
+      leading: c.isGroup
+          ? CircleAvatar(
+              backgroundColor: AppColors.clay,
+              child: const Icon(Icons.groups, color: Colors.white, size: 20),
+            )
+          : AvatarCircle(
+              name: c.peerName,
+              avatarUrl: c.peerAvatarUrl,
+              radius: 22,
+              backgroundColor: AppColors.clay,
+            ),
       title: Text(c.peerName, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(
         "${c.isGroup ? "Groupe · " : ""}${c.isOutgoing ? "Sortant" : "Entrant"} · ${_duration(c)}",

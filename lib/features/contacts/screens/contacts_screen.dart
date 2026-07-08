@@ -5,6 +5,7 @@ import '../../../core/api_client.dart';
 import '../../../core/app_snackbar.dart';
 import '../../../models/contact.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/avatar_circle.dart';
 import '../../../widgets/back_app_bar.dart';
 import '../../../widgets/motif_background.dart';
 import '../../chat/chat_repository.dart';
@@ -67,7 +68,17 @@ class _ContactsScreenState extends State<ContactsScreen> {
       final convId = await chat.createDirect(c.publicNumber);
       if (!mounted) return;
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ChatScreen(convId: convId, title: c.displayName)),
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            convId: convId,
+            title: c.displayName,
+            avatarUrl: c.avatarUrl,
+            otherUserId: c.userId,
+            otherPublicNumber: c.publicNumber,
+            contactId: c.id,
+            isBlocked: c.isBlocked,
+          ),
+        ),
       );
     } on ApiException catch (e) {
       _snack(e.message);
@@ -300,12 +311,11 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
   Widget _tile(Contact c) {
     return ListTile(
-      leading: CircleAvatar(
+      leading: AvatarCircle(
+        name: c.displayName,
+        avatarUrl: c.avatarUrl,
+        radius: 22,
         backgroundColor: c.isBlocked ? Colors.grey : AppColors.clay,
-        child: Text(
-          c.displayName.isNotEmpty ? c.displayName[0].toUpperCase() : "?",
-          style: const TextStyle(color: Colors.white),
-        ),
       ),
       title: Text(c.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text("Numéro : ${c.publicNumber}${c.isBlocked ? " · bloqué" : ""}"),
