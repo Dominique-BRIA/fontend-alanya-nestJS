@@ -69,7 +69,7 @@ class _ContactInfoScreenState extends State<ContactInfoScreen> {
     if (convId == null) return;
     setState(() => _loadingMedia = true);
     try {
-      final msgs = await context.read<ChatRepository>().messages(convId);
+      final msgs = await context.read<ChatRepository>().getMessages(convId);
       if (!mounted) return;
       setState(() {
         _sharedMedia = msgs
