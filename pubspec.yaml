@@ -59,6 +59,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/sounds/
 
 # Icône Android / iOS — source : assets/images/app_icon.png
 # Génération : bash ../scripts/setup-app-icon.sh

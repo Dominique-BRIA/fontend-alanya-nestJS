@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../core/call_permissions.dart';
 import '../../core/debug_overlay.dart';
 import '../../core/realtime_client.dart';
+import '../../core/ringtone_service.dart';
 import '../../models/call_record.dart';
 import 'calls_repository.dart';
 import 'webrtc_group_mesh.dart';
@@ -99,6 +100,9 @@ class CallController extends ChangeNotifier {
         hangUp();
       }
     });
+    // Sonnerie sortante (bip d'attente) tant que le destinataire n'a pas
+    // décroché. Arrêtée dans _onPeerJoined / _clear / hangUp.
+    RingtoneService.instance.startOutgoing();
     notifyListeners();
     // Initialise le stream local immédiatement pour que l'appelant soit prêt
     // à envoyer de l'audio/vidéo dès que le destinataire accepte.
@@ -106,6 +110,7 @@ class CallController extends ChangeNotifier {
       await _ensureMesh();
     } catch (e) {
       // Permission refusée : annule l'appel proprement
+      await RingtoneService.instance.stop();
       await _calls.end(started.id);
       _rt.callState(started.id, "ended", userId: myUserId, displayName: myDisplayName);
       _clear();
@@ -117,6 +122,9 @@ class CallController extends ChangeNotifier {
   Future<void> acceptIncoming() async {
     final inc = incoming;
     if (inc == null || myUserId == null) return;
+
+    // Coupe la sonnerie entrante dès qu'on accepte.
+    await RingtoneService.instance.stop();
 
     final result = await _calls.accept(inc.callId);
     isGroupCall = result.isGroup || inc.isGroup;
@@ -154,6 +162,8 @@ class CallController extends ChangeNotifier {
   Future<void> rejectIncoming() async {
     final inc = incoming;
     if (inc == null) return;
+    // Coupe la sonnerie entrante dès qu'on rejette.
+    await RingtoneService.instance.stop();
     await _calls.reject(inc.callId);
     _rt.callState(
       inc.callId,
@@ -168,6 +178,8 @@ class CallController extends ChangeNotifier {
 
   Future<void> hangUp() async {
     final id = activeCallId ?? incoming?.callId;
+    // Coupe TOUTE sonnerie (sortante ou entrante) : on raccroche.
+    await RingtoneService.instance.stop();
     // Neutralise immédiatement pour bloquer les échos entrants pendant le nettoyage
     final wasGroup = isGroupCall;
     final wasInitiator = isCallInitiator;
@@ -193,6 +205,9 @@ class CallController extends ChangeNotifier {
   void _clear() {
     _ringTimeout?.cancel();
     _ringTimeout = null;
+    // Filet de sécurité : coupe toute sonnerie encore en cours.
+    // (Doublon sûr des stop() éparpillés — mieux vaut couper 2 fois que 0.)
+    RingtoneService.instance.stop();
     incoming = null;
     activeCallId = null;
     activeConvId = null;
@@ -259,6 +274,8 @@ class CallController extends ChangeNotifier {
     joinedParticipantIds.add(userId);
     if (activeRole == ActiveCallRole.outgoing) {
       activeRole = ActiveCallRole.ongoing;
+      // Le destinataire a décroché : arrête la sonnerie sortante.
+      await RingtoneService.instance.stop();
     }
     notifyListeners();
     await _ensureMesh();
@@ -305,6 +322,8 @@ class CallController extends ChangeNotifier {
         groupName: e["groupName"] as String?,
         memberCount: (e["memberCount"] as num?)?.toInt() ?? 2,
       );
+      // Sonnerie entrante (loop) jusqu'à accept/reject/timeout serveur.
+      RingtoneService.instance.startIncoming();
       notifyListeners();
     } else if (type == "call_signal") {
       final callId = e["callId"] as String?;
