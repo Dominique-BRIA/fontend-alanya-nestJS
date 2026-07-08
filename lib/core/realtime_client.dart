@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show HttpClient;
 
 import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -39,6 +40,11 @@ class RealtimeClient extends ChangeNotifier {
       _connecting = false;
       return;
     }
+    // FIX perf DNS : sur mobile, le premier lookup DNS d'un domaine peut échouer
+    // (cache négatif de l'opérateur) puis marcher 30s plus tard. On préchauffe
+    // le DNS via un GET HEAD léger sur l'hôte WS AVANT la tentative WSS.
+    // Ça ne coûte que quelques ms si le DNS est déjà chaud.
+    await _warmupDns();
     try {
       DebugOverlay.log("WS → connexion à $_wsUrl");
       final channel = WebSocketChannel.connect(Uri.parse("$_wsUrl?token=$token"));
@@ -71,7 +77,29 @@ class RealtimeClient extends ChangeNotifier {
       DebugOverlay.log("WS ❌ échec: $e");
       _connecting = false;
       _setConnected(false);
-      _scheduleReconnect();
+      // FIX: on détecte les erreurs DNS pour retenter plus vite qu'un vrai
+      // refus TCP. Un cache DNS négatif se rafraîchit en général en <10s.
+      final isDnsError = e.toString().contains("Failed host lookup") ||
+          e.toString().contains("errno = 7");
+      _scheduleReconnect(dnsError: isDnsError);
+    }
+  }
+
+  /// Préchauffe le DNS en tentant une résolution silencieuse de l'hôte WS
+  /// via une requête HTTP HEAD très courte. Bypass des caches négatifs
+  /// opérateur constatés au Cameroun sur les nouveaux sous-domaines Cloudflare.
+  Future<void> _warmupDns() async {
+    try {
+      final uri = Uri.parse(_wsUrl.replaceFirst(RegExp(r'^wss?'), 'https'));
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+      final req = await client.headUrl(uri).timeout(const Duration(seconds: 3));
+      final resp = await req.close().timeout(const Duration(seconds: 3));
+      // On draine et ferme, on se moque du statut (426 attendu pour un WS pur).
+      await resp.drain<void>();
+      client.close(force: true);
+    } catch (_) {
+      // Si le warmup échoue, on tente quand même la WS ensuite : peut-être que
+      // le driver WebSocket a un résolveur DNS différent qui, lui, marchera.
     }
   }
 
@@ -105,14 +133,20 @@ class RealtimeClient extends ChangeNotifier {
     _scheduleReconnect();
   }
 
-  void _scheduleReconnect() {
+  void _scheduleReconnect({bool dnsError = false}) {
     if (_disposed) return;
     _reconnectTimer?.cancel();
-    // FIX: backoff exponentiel plafonné à 30s pour éviter de hammer
-    // le DNS/opérateur qui vient de RST la connexion.
-    final delaySec = (1 << _reconnectAttempt).clamp(1, 30);
-    _reconnectAttempt = (_reconnectAttempt + 1).clamp(0, 5);
-    DebugOverlay.log("WS ⏳ reconnexion dans ${delaySec}s");
+    // FIX perf : backoff distinct selon le type d'erreur.
+    // - DNS négatif (cache opérateur) : retry rapide 1→2→3→5→8→15s. Le cache
+    //   se rafraîchit en général en <10s côté opérateur mobile.
+    // - Autre (TCP refused, timeout) : backoff plus prudent 2→4→8→16→30s
+    //   pour ne pas saturer un serveur qui redémarre.
+    const dnsSequence = [1, 2, 3, 5, 8, 15, 30];
+    const tcpSequence = [2, 4, 8, 16, 30, 30];
+    final seq = dnsError ? dnsSequence : tcpSequence;
+    final delaySec = seq[_reconnectAttempt.clamp(0, seq.length - 1)];
+    _reconnectAttempt = (_reconnectAttempt + 1).clamp(0, seq.length - 1);
+    DebugOverlay.log("WS ⏳ reconnexion dans ${delaySec}s ${dnsError ? "(DNS)" : ""}");
     _reconnectTimer = Timer(Duration(seconds: delaySec), connect);
   }
 
