@@ -36,12 +36,33 @@ class WebrtcPeerSession {
     _started = true;
 
     final servers = iceServers.isNotEmpty ? iceServers : WebrtcPeerSession.fallbackIce;
-    _pc = await createPeerConnection({"iceServers": servers});
+    // Configuration WebRTC :
+    //  - iceTransportPolicy: "all"  → essaie d'abord P2P direct, puis relay TURN
+    //  - bundlePolicy: "max-bundle" → 1 seul port UDP pour tous les médias
+    //                                  (obligatoire pour beaucoup de firewalls)
+    //  - rtcpMuxPolicy: "require"   → RTP + RTCP sur le même port
+    //  - sdpSemantics: "unified-plan" → format SDP moderne (requis flutter_webrtc récent)
+    _pc = await createPeerConnection({
+      "iceServers": servers,
+      "iceTransportPolicy": "all",
+      "bundlePolicy": "max-bundle",
+      "rtcpMuxPolicy": "require",
+      "sdpSemantics": "unified-plan",
+    });
     _pc!.onIceCandidate = (RTCIceCandidate? c) {
       if (c == null) return;
+      final preview = c.candidate ?? "";
+      debugPrint("[webrtc/$peerId] ICE candidate: ${preview.length > 80 ? preview.substring(0, 80) : preview}");
       onSendSignal({"kind": "ice", "candidate": c.toMap()});
     };
+    _pc!.onIceConnectionState = (RTCIceConnectionState state) {
+      debugPrint("[webrtc/$peerId] ICE state: $state");
+    };
+    _pc!.onConnectionState = (RTCPeerConnectionState state) {
+      debugPrint("[webrtc/$peerId] Connection state: $state");
+    };
     _pc!.onTrack = (RTCTrackEvent e) {
+      debugPrint("[webrtc/$peerId] ⬇️ onTrack: kind=${e.track.kind} streams=${e.streams.length}");
       if (e.streams.isNotEmpty) {
         _remote = e.streams.first;
         onUpdated();
@@ -58,13 +79,36 @@ class WebrtcPeerSession {
     await _flushPendingSignals();
   }
 
+  // Serveurs ICE (STUN + TURN) pour la traversée NAT.
+  //
+  // STRUCTURE IMPORTANTE : chaque entrée doit avoir UN SEUL "urls" avec UN SEUL
+  // protocole. Mélanger stun: et turn: dans un même objet ICEServer avec
+  // username/credential est mal supporté par plusieurs implémentations WebRTC
+  // (les credentials seraient appliquées au stun: aussi, ce qui trouble le stack).
+  //
+  // On propose plusieurs transports pour maximiser les chances de succès sur
+  // réseaux mobiles restrictifs (4G Cameroun, WiFi d'entreprise, etc.) :
+  //   1. STUN UDP alanya  : le plus rapide, résout la plupart des NATs
+  //   2. STUN Google      : backup public au cas où alanya.cloud momentanément KO
+  //   3. TURN UDP         : relay si STUN insuffisant (NAT symétrique)
+  //   4. TURN TCP         : fallback si UDP entièrement bloqué
+  //   5. TURNS 443        : dernier recours, passe même derrière les proxies HTTPS
   static const fallbackIce = [
+    {"urls": "stun:open.alanya.cloud:3478"},
+    {"urls": "stun:stun.l.google.com:19302"},
     {
-      "urls": [
-        "stun:open.alanya.cloud:3478",
-        "turn:open.alanya.cloud:3478?transport=tcp",
-      ],
-      "username": "alanya", // identifiants générés par le dashboard Metered
+      "urls": "turn:open.alanya.cloud:3478?transport=udp",
+      "username": "alanya",
+      "credential": "alanya2026",
+    },
+    {
+      "urls": "turn:open.alanya.cloud:3478?transport=tcp",
+      "username": "alanya",
+      "credential": "alanya2026",
+    },
+    {
+      "urls": "turns:open.alanya.cloud:5349?transport=tcp",
+      "username": "alanya",
       "credential": "alanya2026",
     },
   ];
