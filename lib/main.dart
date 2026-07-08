@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'core/api_client.dart';
 import 'core/authed_api.dart';
+import 'core/debug_overlay.dart';
 import 'core/locale_controller.dart';
 import 'core/push_service.dart';
 import 'core/realtime_client.dart';
@@ -114,7 +115,7 @@ class AuthGate extends StatelessWidget {
           body: Center(child: CircularProgressIndicator(color: AppColors.terracotta)),
         );
       case AuthStatus.authenticated:
-        return CallListener(child: const HomeScreen());
+        return DebugOverlay(child: CallListener(child: const HomeScreen()));
       case AuthStatus.unauthenticated:
         return const WelcomeScreen();
     }

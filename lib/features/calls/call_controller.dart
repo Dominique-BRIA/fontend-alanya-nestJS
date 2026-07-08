@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../core/call_permissions.dart';
+import '../../core/debug_overlay.dart';
 import '../../core/realtime_client.dart';
 import '../../models/call_record.dart';
 import 'calls_repository.dart';
@@ -292,6 +293,7 @@ class CallController extends ChangeNotifier {
     debugPrint("[CallController] Événement reçu: $type");
     if (type == "incoming_call") {
       final callId = e["callId"] as String;
+      DebugOverlay.log("CC 📞 APPEL: ${e["callerName"]}");
       debugPrint("[CallController] 📞 APPEL ENTRANT de ${e["callerName"]} !");
       incoming = IncomingCallInfo(
         callId: callId,

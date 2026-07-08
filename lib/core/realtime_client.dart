@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'debug_overlay.dart';
 import 'server_config.dart';
 import 'token_storage.dart';
 
@@ -37,18 +38,24 @@ class RealtimeClient extends ChangeNotifier {
       return;
     }
     try {
+      DebugOverlay.log("WS → connexion à $_wsUrl");
       final channel = WebSocketChannel.connect(Uri.parse("$_wsUrl?token=$token"));
       await channel.ready; // lève une exception si la connexion échoue
       _channel = channel;
       _connecting = false;
       _setConnected(true);
+      DebugOverlay.log("WS ✅ CONNECTÉ");
       _sub = channel.stream.listen(
         _onData,
         onDone: _handleDrop,
-        onError: (_) => _handleDrop(),
+        onError: (e) {
+          DebugOverlay.log("WS ⚠️ err: $e");
+          _handleDrop();
+        },
         cancelOnError: true,
       );
-    } catch (_) {
+    } catch (e) {
+      DebugOverlay.log("WS ❌ échec: $e");
       _connecting = false;
       _setConnected(false);
       _scheduleReconnect();
@@ -59,17 +66,23 @@ class RealtimeClient extends ChangeNotifier {
     try {
       final decoded = jsonDecode(raw as String);
       if (decoded is Map<String, dynamic>) {
-        if (decoded["type"] == "incoming_call") {
+        final type = decoded["type"];
+        DebugOverlay.log("WS ⬇️ $type");
+        if (type == "incoming_call") {
+          DebugOverlay.log("📞 INCOMING_CALL reçu !");
           debugPrint("[RealtimeClient] Trame incoming_call reçue du serveur !");
         }
         _controller.add(decoded);
+      } else {
+        DebugOverlay.log("WS ⬇️ (non-map)");
       }
-    } catch (_) {
-      // ignore les trames non-JSON
+    } catch (e) {
+      DebugOverlay.log("WS ⬇️ ❌ non-JSON: $e");
     }
   }
 
   void _handleDrop() {
+    DebugOverlay.log("WS 🔌 déconnecté (drop)");
     _setConnected(false);
     _sub?.cancel();
     _sub = null;
