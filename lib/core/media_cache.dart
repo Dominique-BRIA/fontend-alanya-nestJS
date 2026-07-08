@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 /// Gestionnaire de cache local pour les médias (images, vidéos, fichiers).
 ///
 /// Vérifie d'abord le stockage local avant de faire une requête réseau.
-/// Organisé dans SewaChat/cache/ pour éviter de polluer le dossier de téléchargement.
+/// Organisé dans alanya_media_cache/ pour éviter de polluer le dossier de téléchargement.
 class MediaCache {
   MediaCache._();
 
@@ -69,7 +69,7 @@ class MediaCache {
     } else {
       base = await getApplicationDocumentsDirectory();
     }
-    final dir = Directory('${base.path}/SewaChat/cache');
+    final dir = Directory('${base.path}/alanya_media_cache');
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }

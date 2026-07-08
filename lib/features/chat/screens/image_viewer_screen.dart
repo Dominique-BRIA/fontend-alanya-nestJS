@@ -42,7 +42,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     if (path != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Sauvegardé dans SewaChat/ : ${widget.filename}'),
+          content: Text('Enregistré dans Alanya/ : ${widget.filename}'),
           backgroundColor: AppColors.forest,
           action: SnackBarAction(
             label: 'Ouvrir',

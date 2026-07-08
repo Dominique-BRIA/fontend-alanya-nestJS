@@ -162,7 +162,7 @@ class PushService {
 
     _localPlugin.show(
       DateTime.now().millisecondsSinceEpoch.remainder(100000),
-      notification.title ?? 'SewaChat',
+      notification.title ?? 'Alanya',
       notification.body ?? '',
       const NotificationDetails(
         android: AndroidNotificationDetails(

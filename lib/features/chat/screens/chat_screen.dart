@@ -35,6 +35,7 @@ import '../../contacts/screens/contact_info_screen.dart';
 import '../../media/media_repository.dart';
 import '../chat_repository.dart';
 import 'image_viewer_screen.dart';
+import 'pdf_viewer_screen.dart';
 import 'video_viewer_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -835,7 +836,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final path = await downloadUrl(url, name);
     if (!mounted) return;
     if (path != null) {
-      showAppSnackBar("Sauvegardé dans SewaChat/ : $name");
+      showAppSnackBar("Enregistré dans Alanya/ : $name");
     } else {
       showAppSnackBar("Échec du téléchargement");
     }
@@ -868,6 +869,25 @@ class _ChatScreenState extends State<ChatScreen> {
       MaterialPageRoute(
         builder: (_) => VideoViewerScreen(
           videoUrl: "$_baseUrl${media.url}?token=$token",
+          downloadUrl: "$_baseUrl${media.url}?download=1&token=$token",
+          filename: name,
+        ),
+      ),
+    );
+  }
+
+  /// Ouvre un PDF dans la visionneuse intégrée (plein écran, style WhatsApp).
+  /// Télécharge d'abord le fichier dans le cache app-privé (nécessaire pour
+  /// que flutter_pdfview puisse le lire), puis affiche avec navigation par pages.
+  Future<void> _openPdfViewer(Message m) async {
+    final token = await _freshToken();
+    final media = m.media.first;
+    final name = media.filename ?? "document-${media.id}.pdf";
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PdfViewerScreen(
+          pdfUrl: "$_baseUrl${media.url}?token=$token",
           downloadUrl: "$_baseUrl${media.url}?download=1&token=$token",
           filename: name,
         ),
@@ -1479,8 +1499,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final size = _humanSize(media.sizeBytes);
     final onText = mine ? Colors.white : AppColors.ink;
     final onSub = mine ? Colors.white70 : Colors.black45;
+    final isPdf = media.mimeType == "application/pdf" || ext.toLowerCase() == "pdf";
     return InkWell(
-      onTap: () => _download(media),
+      // Tap sur PDF → viewer intégré. Tap sur autre fichier → téléchargement direct.
+      onTap: () => isPdf ? _openPdfViewer(m) : _download(media),
       borderRadius: BorderRadius.circular(8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

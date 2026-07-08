@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:media_store_plus/media_store_plus.dart';
 import 'package:provider/provider.dart';
 
 import 'core/api_client.dart';
@@ -28,6 +30,18 @@ import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // MediaStore : sauvegarde des téléchargements dans le dossier public
+  // "Alanya" (Pictures/Movies/Music/Download selon le type de fichier).
+  // Import fait conditionnellement pour ne pas casser le web build.
+  if (!kIsWeb) {
+    try {
+      await MediaStore.ensureInitialized();
+      MediaStore.appFolder = 'Alanya';
+    } catch (_) {
+      // Non-Android ou plateforme non supportée : on ignore silencieusement.
+    }
+  }
 
   final api = ApiClient();
   final storage = TokenStorage();

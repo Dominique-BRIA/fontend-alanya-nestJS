@@ -74,7 +74,7 @@ class _VideoViewerScreenState extends State<VideoViewerScreen> {
     if (path != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Vidéo sauvegardée dans SewaChat/Videos/'),
+          content: const Text('Vidéo enregistrée dans Alanya/'),
           backgroundColor: AppColors.forest,
           action: SnackBarAction(
             label: 'Ouvrir',
