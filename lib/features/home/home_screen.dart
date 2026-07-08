@@ -37,7 +37,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
-  RealtimeClient? _realtime;
 
   @override
   void initState() {
@@ -59,12 +58,19 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _realtime ??= context.read<RealtimeClient>();
   }
 
   @override
   void dispose() {
-    _realtime?.disconnect();
+    // FIX: NE PAS déconnecter la WS ici.
+    // HomeScreen peut être démonté/remonté (changement de langue via
+    // LocaleController.notifyListeners, rotation, hot restart, etc.).
+    // Si on disconnect ici, la WS coupe pendant plusieurs secondes et
+    // toute trame `incoming_call` reçue pendant ce trou est PERDUE côté
+    // serveur (sendTo ne bufferise pas les users offline).
+    // La WS doit vivre tant que l'utilisateur est loggué. Elle sera fermée
+    // par AuthController.logout() ou par RealtimeClient.dispose() en fin
+    // de vie de l'app.
     super.dispose();
   }
 
