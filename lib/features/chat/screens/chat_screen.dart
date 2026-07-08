@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../../core/message_cache.dart';
+import '../../../core/outbox.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -368,7 +369,35 @@ class _ChatScreenState extends State<ChatScreen> {
     } on ApiException catch (e) {
       _showError(e.message);
     } catch (_) {
-      _showError(tr(context, 'send_failed'));
+      // Ni WS ni REST : on met en outbox (offline-first, style WhatsApp).
+      // Le message reste visible avec une icône horloge, envoi automatique
+      // dès que la connectivité revient.
+      final tempId = "out-${DateTime.now().microsecondsSinceEpoch}";
+      final optimistic = Message(
+        id: tempId,
+        convId: widget.convId,
+        senderId: _myId ?? "",
+        content: text,
+        type: "TEXT",
+        status: "PENDING",
+        replyToId: replyId,
+        replyTo: null,
+        media: const [],
+        createdAt: DateTime.now(),
+      );
+      _cacheMsg(optimistic);
+      _inputCtrl.clear();
+      setState(() {
+        _messages = [..._messages, optimistic];
+        _replyTo = null;
+      });
+      _scrollToBottom();
+      await context.read<Outbox>().enqueue(
+            tempId: tempId,
+            convId: widget.convId,
+            content: text,
+            replyToId: replyId,
+          );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -381,8 +410,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // --- Helper : coches de statut (style WhatsApp) ---
+  // PENDING → ⏱ (en attente d'envoi via Outbox)
   // SENT → ✓ (gris) | DELIVERED → ✓✓ (gris) | READ → ✓✓ (bleu)
   Widget _statusTicks(String status, Color baseColor) {
+    if (status == "PENDING") {
+      // Horloge = message en outbox, sera envoyé dès le retour du réseau.
+      return Icon(Icons.access_time, size: 13, color: baseColor);
+    }
     if (status == "READ") {
       return const Icon(Icons.done_all, size: 15, color: AppColors.tickBlue);
     } else if (status == "DELIVERED") {

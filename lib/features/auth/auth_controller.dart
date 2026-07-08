@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../core/api_client.dart';
+import '../../core/call_cache.dart';
+import '../../core/contact_cache.dart';
+import '../../core/conversation_cache.dart';
 import '../../core/message_cache.dart';
 import '../../core/push_service.dart';
 import '../../core/token_storage.dart';
@@ -122,6 +125,11 @@ class AuthController extends ChangeNotifier {
     }
     await _storage.clear();
     await MessageCache.clear();
+    // Purge des caches offline : la session change, un autre user pourrait
+    // se connecter sur ce téléphone.
+    await ConversationCache.clear();
+    await CallCache.clear();
+    await ContactCache.clear();
     _set(AuthStatus.unauthenticated, null);
   }
 

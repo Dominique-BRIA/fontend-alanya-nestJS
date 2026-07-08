@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_snackbar.dart';
+import '../../../core/contact_cache.dart';
 import '../../../models/contact.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/avatar_circle.dart';
@@ -39,6 +40,18 @@ class _ContactsScreenState extends State<ContactsScreen> {
       _loading = true;
       _errorMsg = null;
     });
+
+    // 1) Cache local d'abord (offline-first).
+    final cached = await ContactCache.getAll();
+    if (cached.isNotEmpty && mounted) {
+      setState(() {
+        _contacts = cached;
+        _loading = false;
+        _errorMsg = null;
+      });
+    }
+
+    // 2) Rafraîchit depuis le serveur.
     try {
       final list = await context.read<ContactsRepository>().list();
       if (!mounted) return;
@@ -47,17 +60,23 @@ class _ContactsScreenState extends State<ContactsScreen> {
         _loading = false;
         _errorMsg = null;
       });
+      await ContactCache.putAll(list);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _errorMsg = "Erreur ${e.statusCode} : ${e.message}";
+        // Ne montre l'erreur que si le cache était vide (aucun contenu à afficher).
+        _errorMsg = (_contacts?.isEmpty ?? true)
+            ? "Erreur ${e.statusCode} : ${e.message}"
+            : null;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _errorMsg = "Impossible de charger les contacts.\nVérifie ta connexion.";
+        _errorMsg = (_contacts?.isEmpty ?? true)
+            ? "Impossible de charger les contacts.\nVérifie ta connexion."
+            : null;
       });
     }
   }

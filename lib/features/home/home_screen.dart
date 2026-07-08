@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../l10n/app_localizations.dart';
 
+import '../../core/connectivity_service.dart';
+import '../../core/conversation_cache.dart';
 import '../../core/push_service.dart';
 import '../../core/realtime_client.dart';
 import '../../models/ai_message.dart';
@@ -227,6 +229,16 @@ class _ConversationsTabState extends State<_ConversationsTab> {
   }
 
   Future<void> _load() async {
+    // 1) Charge d'abord le cache local (affichage instantané, offline-first).
+    final cached = await ConversationCache.getAll();
+    if (cached.isNotEmpty && mounted) {
+      setState(() {
+        _convs = cached;
+        _error = false;
+      });
+    }
+
+    // 2) Synchronise avec le serveur en arrière-plan.
     try {
       final convs = await context.read<ChatRepository>().listConversations();
       if (!mounted) return;
@@ -234,18 +246,31 @@ class _ConversationsTabState extends State<_ConversationsTab> {
         _convs = convs;
         _error = false;
       });
+      // Met à jour le cache pour la prochaine fois.
+      await ConversationCache.putAll(convs);
+      // Signale à l'app qu'on est bien online.
+      if (mounted) context.read<ConnectivityService>().markHttpSucceeded();
     } catch (_) {
-      if (mounted) setState(() => _error = true);
+      // Réseau KO : on garde le cache, on n'affiche l'erreur que si on n'a
+      // vraiment rien du tout à montrer.
+      if (mounted) {
+        context.read<ConnectivityService>().markHttpFailed();
+        setState(() => _error = _convs == null || _convs!.isEmpty);
+      }
     }
   }
 
   Future<void> _poll() async {
     if (!mounted) return;
+    // Skip si offline : évite les timeouts qui figent l'UI.
+    if (context.read<ConnectivityService>().isOffline) return;
     try {
       final convs = await context.read<ChatRepository>().listConversations();
       if (mounted) setState(() => _convs = convs);
+      await ConversationCache.putAll(convs);
+      if (mounted) context.read<ConnectivityService>().markHttpSucceeded();
     } catch (_) {
-      // silencieux
+      if (mounted) context.read<ConnectivityService>().markHttpFailed();
     }
   }
 

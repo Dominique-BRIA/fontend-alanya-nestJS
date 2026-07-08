@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 
 import 'core/api_client.dart';
 import 'core/authed_api.dart';
+import 'core/connectivity_service.dart';
 import 'core/locale_controller.dart';
+import 'core/outbox.dart';
 import 'core/push_service.dart';
 import 'core/realtime_client.dart';
 import 'core/token_storage.dart';
@@ -19,6 +21,7 @@ import 'features/calls/calls_repository.dart';
 import 'features/chat/chat_repository.dart';
 import 'features/contacts/contacts_repository.dart';
 import 'features/home/home_screen.dart';
+import 'widgets/offline_banner.dart';
 import 'features/media/media_repository.dart';
 import 'features/status/status_repository.dart';
 import 'theme/app_theme.dart';
@@ -52,6 +55,18 @@ void main() async {
         ChangeNotifierProvider<RealtimeClient>.value(value: realtime),
         ChangeNotifierProvider<LocaleController>(
           create: (_) => LocaleController()..load(),
+        ),
+        // Service de connectivité — dérivé de RealtimeClient + retours HTTP.
+        ChangeNotifierProvider<ConnectivityService>(
+          create: (ctx) => ConnectivityService(ctx.read<RealtimeClient>()),
+        ),
+        // File d'attente des messages envoyés offline (WhatsApp-like).
+        // Dépend de ChatRepository + ConnectivityService.
+        ChangeNotifierProvider<Outbox>(
+          create: (ctx) => Outbox(
+            ctx.read<ChatRepository>(),
+            ctx.read<ConnectivityService>(),
+          ),
         ),
         ChangeNotifierProvider<CallController>(
           create: (ctx) => CallController(
@@ -114,7 +129,11 @@ class AuthGate extends StatelessWidget {
           body: Center(child: CircularProgressIndicator(color: AppColors.terracotta)),
         );
       case AuthStatus.authenticated:
-        return CallListener(child: const HomeScreen());
+        // OfflineBanner : bandeau gris "En attente de connexion…" en haut
+        // de l'écran quand le réseau est absent. Disparaît automatiquement.
+        return OfflineBanner(
+          child: CallListener(child: const HomeScreen()),
+        );
       case AuthStatus.unauthenticated:
         return const WelcomeScreen();
     }

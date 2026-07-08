@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/call_cache.dart';
 import '../../../models/call_record.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/avatar_circle.dart';
@@ -41,6 +42,15 @@ class _CallsScreenState extends State<CallsScreen> {
   }
 
   Future<void> _load() async {
+    // 1) Cache local d'abord (offline-first).
+    final cached = await CallCache.getAll();
+    if (cached.isNotEmpty && mounted) {
+      setState(() {
+        _calls = cached;
+        _error = false;
+      });
+    }
+    // 2) Rafraîchit depuis le serveur.
     try {
       final calls = await context.read<CallsRepository>().history();
       if (!mounted) return;
@@ -48,8 +58,11 @@ class _CallsScreenState extends State<CallsScreen> {
         _calls = calls;
         _error = false;
       });
+      await CallCache.putAll(calls);
     } catch (_) {
-      if (mounted) setState(() => _error = true);
+      if (mounted) {
+        setState(() => _error = _calls == null || _calls!.isEmpty);
+      }
     }
   }
 
