@@ -37,7 +37,7 @@ workflows:
           flutter build apk --release \
             --android-skip-build-dependency-validation \
             --dart-define=API_URL=https://backend-alanya.vercel.app \
-            --dart-define=WS_URL=wss://alanya-ws.onrender.com
+            --dart-define=WS_URL=wss://alanya-ws.d-bria00.workers.dev
 
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
