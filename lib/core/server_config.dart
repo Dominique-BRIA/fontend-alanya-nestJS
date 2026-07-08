@@ -8,10 +8,22 @@ class ServerConfig {
     defaultValue: "https://backend-alanya.vercel.app",
   );
 
-  // URL du serveur WebSocket (Render)
-  // On force l'URL WSS de production même en Debug pour que les appels WebRTC fonctionnent sur des vrais téléphones.
+  // URL du serveur WebSocket.
+  //
+  // On passe désormais par un Cloudflare Worker qui proxifie vers Render
+  // (wss://alanya-ws.onrender.com). Motif : certains opérateurs mobiles
+  // africains (notamment au Cameroun) bloquent ou filtrent activement les
+  // domaines *.onrender.com, empêchant l'établissement de la WebSocket
+  // (errno=7 DNS lookup failed, errno=103 connection abort).
+  //
+  // Le Worker Cloudflare sort en IP Cloudflare, quasiment jamais filtrée,
+  // ce qui débloque les appels temps réel pour les utilisateurs concernés.
+  // Code du Worker : voir alanya-ws-worker.js à la racine du repo.
+  //
+  // Si tu veux revenir à Render en direct (test), passe --dart-define=WS_URL=wss://alanya-ws.onrender.com
   static const String wsBase = String.fromEnvironment(
     'WS_URL',
-    defaultValue: "wss://alanya-ws.onrender.com",
+    defaultValue: "wss://alanya-ws.d-bria00.workers.dev",
   );
 }
+
