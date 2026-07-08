@@ -215,8 +215,14 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         ? (cc.incoming?.displayTitle ?? "Appel")
         : (cc.activePeerName ?? "Contact");
     final isVideo = (widget.incoming ? cc.incoming?.callType : cc.activeType) == "VIDEO";
+    // FIX vidéo callee : après acceptIncoming(), cc.incoming devient null
+    // alors que widget.incoming reste true (paramètre immuable du widget).
+    // Sans ce fallback, isVideo passait à false et les vidéos n'étaient pas
+    // affichées côté callee (bug : « B ne voit ni sa vidéo ni celle de A »).
+    // On retombe sur cc.activeType qui reste "VIDEO" pendant tout l'appel actif.
+    final isVideoActive = isVideo || cc.activeType == "VIDEO";
     final remotes = cc.remoteStreams;
-    final showVideo = isVideo && cc.activeRole == ActiveCallRole.ongoing && remotes.isNotEmpty;
+    final showVideo = isVideoActive && cc.activeRole == ActiveCallRole.ongoing && remotes.isNotEmpty;
     final showIncoming = widget.incoming && cc.incoming != null;
     final showActive = cc.activeCallId != null && cc.activeRole != null;
 
