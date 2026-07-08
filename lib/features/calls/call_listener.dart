@@ -19,13 +19,14 @@ class _CallListenerState extends State<CallListener> {
   @override
   Widget build(BuildContext context) {
     final cc = context.watch<CallController>();
-    debugPrint("[CallListener] build(incoming=${cc.incoming?.callId}, routeOpen=$_incomingRouteOpen)");
+    if (cc.incoming != null) {
+      debugPrint("[CallListener] cc.incoming n'est pas nul ! Ouverture de l'écran d'appel...");
+    }
     if (cc.incoming != null && !_incomingRouteOpen) {
-      debugPrint("[CallListener] 🚨 Ouverture de ActiveCallScreen(incoming:true) ...");
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted || cc.incoming == null) return;
         setState(() => _incomingRouteOpen = true);
-        await Navigator.of(context, rootNavigator: true).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(
             fullscreenDialog: true,
             builder: (_) => const ActiveCallScreen(incoming: true),

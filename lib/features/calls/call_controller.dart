@@ -289,20 +289,10 @@ class CallController extends ChangeNotifier {
 
   Future<void> _onEvent(Map<String, dynamic> e) async {
     final type = e["type"];
-    debugPrint("[CallController] Événement reçu: $type (activeCallId=$activeCallId, incoming=${incoming?.callId})");
+    debugPrint("[CallController] Événement reçu: $type");
     if (type == "incoming_call") {
       final callId = e["callId"] as String;
-      debugPrint("[CallController] 📞 APPEL ENTRANT de ${e["callerName"]} ! callId=$callId");
-      // FIX défensif: si on est déjà dans un appel actif ou avec un incoming
-      // déjà présent (échos, doubles trames), on ignore proprement.
-      if (activeCallId != null && activeCallId == callId) {
-        debugPrint("[CallController] ignoré: déjà dans cet appel");
-        return;
-      }
-      if (incoming != null && incoming!.callId == callId) {
-        debugPrint("[CallController] ignoré: incoming déjà présent pour ce callId");
-        return;
-      }
+      debugPrint("[CallController] 📞 APPEL ENTRANT de ${e["callerName"]} !");
       incoming = IncomingCallInfo(
         callId: callId,
         convId: e["convId"] as String?,
