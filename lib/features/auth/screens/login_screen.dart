@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -9,6 +10,65 @@ import '../auth_controller.dart';
 import '../auth_repository.dart';
 import 'forgot_password_screen.dart';
 import '../../../theme/app_theme.dart';
+
+/// Formateur qui insère un espace tous les 2 chiffres, uniquement quand le champ
+/// ne contient que des chiffres/espaces (numéro Alanya). Si l'utilisateur tape
+/// un email, on ne touche à rien.
+///
+/// - Longueur affichée max : 11 caractères (8 chiffres + 3 espaces = "12 34 56 78")
+/// - Gère correctement la position du curseur pendant l'édition (insertions,
+///   suppressions, collage).
+class _AlanyaNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final raw = newValue.text;
+
+    // Si l'utilisateur tape autre chose que des chiffres/espaces (lettre, @, .),
+    // on considère que c'est un email : on laisse passer tel quel.
+    if (raw.isNotEmpty && !RegExp(r'^[\d\s]*$').hasMatch(raw)) {
+      return newValue;
+    }
+
+    // Retire tous les espaces pour obtenir les chiffres purs.
+    final digitsOnly = raw.replaceAll(RegExp(r'\s+'), '');
+    if (digitsOnly.length > 8) {
+      // Limite dure : au-delà de 8 chiffres, on refuse l'ajout.
+      return oldValue;
+    }
+
+    // Reconstruit avec un espace tous les 2 chiffres.
+    final buf = StringBuffer();
+    for (int i = 0; i < digitsOnly.length; i++) {
+      if (i > 0 && i % 2 == 0) buf.write(' ');
+      buf.write(digitsOnly[i]);
+    }
+    final formatted = buf.toString();
+
+    // Recalcule la position du curseur : on veut qu'il reste à la même position
+    // "relative" aux chiffres, pas décalé par les espaces auto-insérés.
+    // On compte combien de chiffres il y avait avant l'ancienne position du curseur.
+    final oldCursor = newValue.selection.baseOffset.clamp(0, raw.length);
+    int digitsBeforeCursor = 0;
+    for (int i = 0; i < oldCursor; i++) {
+      if (RegExp(r'\d').hasMatch(raw[i])) digitsBeforeCursor++;
+    }
+    // Retrouve la nouvelle position en avançant du même nombre de chiffres.
+    int newCursor = 0;
+    int seen = 0;
+    while (newCursor < formatted.length && seen < digitsBeforeCursor) {
+      if (RegExp(r'\d').hasMatch(formatted[newCursor])) seen++;
+      newCursor++;
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: newCursor),
+    );
+  }
+}
 
 /// Connexion par email OU numéro public à 6 chiffres + mot de passe.
 class LoginScreen extends StatefulWidget {
@@ -36,8 +96,15 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
+      // Nettoie les espaces si l'utilisateur a tapé un numéro Alanya formaté.
+      // (Le backend attend 6 chiffres bruts, pas "12 34 56".)
+      final rawId = _idCtrl.text.trim();
+      final identifier = RegExp(r'^[\d\s]+$').hasMatch(rawId)
+          ? rawId.replaceAll(RegExp(r'\s+'), '')
+          : rawId;
+
       final session = await context.read<AuthRepository>().login(
-            identifier: _idCtrl.text.trim(),
+            identifier: identifier,
             password: _passwordCtrl.text,
           );
       if (!mounted) return;
@@ -73,6 +140,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 24),
                 TextFormField(
                   controller: _idCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  inputFormatters: [_AlanyaNumberFormatter()],
                   decoration: InputDecoration(
                     labelText: tr(context, 'email_or_alanya'),
                     prefixIcon: const Icon(Icons.alternate_email),
