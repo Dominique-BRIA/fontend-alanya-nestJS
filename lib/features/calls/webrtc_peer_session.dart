@@ -61,8 +61,8 @@ class WebrtcPeerSession {
   static const fallbackIce = [
     {
       "urls": [
-        "stun:76.13.44.253:3478",
-        "turn:76.13.44.253:3478?transport=tcp",
+        "stun:open.alanya.cloud:3478",
+        "turn:open.alanya.cloud:3478?transport=tcp",
       ],
       "username": "alanya", // identifiants générés par le dashboard Metered
       "credential": "alanya2026",
