@@ -19,8 +19,10 @@ class RealtimeClient extends ChangeNotifier {
   WebSocketChannel? _channel;
   StreamSubscription? _sub;
   Timer? _reconnectTimer;
+  Timer? _pingTimer;
   bool _connecting = false;
   bool _disposed = false;
+  int _reconnectAttempt = 0;
 
   bool connected = false;
 
@@ -45,6 +47,7 @@ class RealtimeClient extends ChangeNotifier {
       _connecting = false;
       _setConnected(true);
       DebugOverlay.log("WS ✅ CONNECTÉ");
+      _reconnectAttempt = 0;
       _sub = channel.stream.listen(
         _onData,
         onDone: _handleDrop,
@@ -52,8 +55,18 @@ class RealtimeClient extends ChangeNotifier {
           DebugOverlay.log("WS ⚠️ err: $e");
           _handleDrop();
         },
-        cancelOnError: true,
+        // FIX: cancelOnError:false — sinon la moindre trame louche tue la sub
+        // et on rate tous les incoming_call qui suivent.
+        cancelOnError: false,
       );
+      // Ping applicatif toutes les 20s pour maintenir la connexion vivante
+      // à travers les NAT mobiles agressifs (opérateurs qui killent les TCP idle).
+      _pingTimer?.cancel();
+      _pingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+        try {
+          _channel?.sink.add(jsonEncode({"type": "ping"}));
+        } catch (_) {}
+      });
     } catch (e) {
       DebugOverlay.log("WS ❌ échec: $e");
       _connecting = false;
@@ -87,13 +100,20 @@ class RealtimeClient extends ChangeNotifier {
     _sub?.cancel();
     _sub = null;
     _channel = null;
+    _pingTimer?.cancel();
+    _pingTimer = null;
     _scheduleReconnect();
   }
 
   void _scheduleReconnect() {
     if (_disposed) return;
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), connect);
+    // FIX: backoff exponentiel plafonné à 30s pour éviter de hammer
+    // le DNS/opérateur qui vient de RST la connexion.
+    final delaySec = (1 << _reconnectAttempt).clamp(1, 30);
+    _reconnectAttempt = (_reconnectAttempt + 1).clamp(0, 5);
+    DebugOverlay.log("WS ⏳ reconnexion dans ${delaySec}s");
+    _reconnectTimer = Timer(Duration(seconds: delaySec), connect);
   }
 
   void _setConnected(bool v) {
@@ -159,6 +179,8 @@ class RealtimeClient extends ChangeNotifier {
 
   void disconnect() {
     _reconnectTimer?.cancel();
+    _pingTimer?.cancel();
+    _pingTimer = null;
     _sub?.cancel();
     _channel?.sink.close();
     _channel = null;
