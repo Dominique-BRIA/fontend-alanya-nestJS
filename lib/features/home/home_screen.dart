@@ -81,9 +81,8 @@ class _HomeScreenState extends State<HomeScreen> {
       const _AiTab(),
     ];
 
-    return CallListener(
-      child: Scaffold(
-        appBar: AppBar(
+    return Scaffold(
+      appBar: AppBar(
           title: const Text("Alanya"),
           actions: [
             PopupMenuButton<String>(
@@ -123,7 +122,6 @@ class _HomeScreenState extends State<HomeScreen> {
             NavigationDestination(icon: const Icon(Icons.auto_awesome), label: "IA"),
           ],
         ),
-      ),
     );
   }
 }

@@ -14,6 +14,7 @@ import 'features/auth/screens/welcome_screen.dart';
 import 'features/account/account_repository.dart';
 import 'features/ai/ai_repository.dart';
 import 'features/calls/call_controller.dart';
+import 'features/calls/call_listener.dart';
 import 'features/calls/calls_repository.dart';
 import 'features/chat/chat_repository.dart';
 import 'features/contacts/contacts_repository.dart';
@@ -113,7 +114,7 @@ class AuthGate extends StatelessWidget {
           body: Center(child: CircularProgressIndicator(color: AppColors.terracotta)),
         );
       case AuthStatus.authenticated:
-        return const HomeScreen();
+        return CallListener(child: const HomeScreen());
       case AuthStatus.unauthenticated:
         return const WelcomeScreen();
     }
