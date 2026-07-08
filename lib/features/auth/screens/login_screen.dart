@@ -70,7 +70,7 @@ class _AlanyaNumberFormatter extends TextInputFormatter {
   }
 }
 
-/// Connexion par email OU numéro public à 6 chiffres + mot de passe.
+/// Connexion par email OU numéro public (6 ou 8 chiffres) + mot de passe.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
