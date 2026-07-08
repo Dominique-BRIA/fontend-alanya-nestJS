@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -112,8 +115,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final auth = context.read<AuthController>();
 
     try {
-      final mime = _mimeFromName(file.name);
+      // Détecte le MIME à partir des bytes eux-mêmes (magic number) plutôt
+      // que du nom de fichier. Le picker Android peut renvoyer un nom sans
+      // extension ou avec une extension trompeuse selon l'appli source.
+      final mime = _mimeFromBytes(bytes) ?? _mimeFromName(file.name);
+      debugPrint("[avatar] upload mime=$mime filename=${file.name} size=${bytes.length}o");
+
       final uploaded = await mediaRepo.upload(bytes, file.name, mime);
+      debugPrint("[avatar] uploaded id=${uploaded.id} url=${uploaded.url}");
 
       // Envoie l'URL relative (/api/media/<id>). Le backend accepte
       // désormais ce format (cf. updateProfileSchema).
@@ -125,12 +134,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
       _snack("Photo de profil mise à jour");
     } on ApiException catch (e) {
-      _snack(e.message);
-    } catch (_) {
-      _snack("Échec de l'envoi de la photo");
+      // Message détaillé avec code HTTP pour faciliter le diagnostic.
+      debugPrint("[avatar] ❌ ApiException status=${e.statusCode} message=${e.message}");
+      _snack("Erreur ${e.statusCode} : ${e.message}");
+    } catch (e, st) {
+      debugPrint("[avatar] ❌ exception: $e\n$st");
+      _snack("Échec de l'envoi de la photo : $e");
     } finally {
       if (mounted) setState(() => _uploadingAvatar = false);
     }
+  }
+
+  /// Détecte le type MIME à partir des premiers octets du fichier (magic number).
+  /// Beaucoup plus fiable que l'extension du nom, surtout sur Android où le
+  /// picker peut renvoyer "image" ou "IMG_1234" sans extension.
+  String? _mimeFromBytes(Uint8List bytes) {
+    if (bytes.length < 12) return null;
+    // JPEG : FF D8 FF
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return "image/jpeg";
+    // PNG : 89 50 4E 47
+    if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return "image/png";
+    // GIF : "GIF8"
+    if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38) return "image/gif";
+    // WebP : "RIFF" ... "WEBP"
+    if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
+        bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) {
+      return "image/webp";
+    }
+    // HEIC/HEIF : "ftyp" à l'offset 4, puis brand "heic"/"heix"/"mif1"...
+    if (bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
+      final brand = String.fromCharCodes(bytes.sublist(8, 12));
+      if (brand == "heic" || brand == "heix" || brand == "hevc" || brand == "mif1") {
+        return "image/heic";
+      }
+    }
+    return null;
   }
 
   String _mimeFromName(String name) {
