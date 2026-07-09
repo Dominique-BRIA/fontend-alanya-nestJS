@@ -33,8 +33,12 @@ workflows:
 
       - name: Build APK release
         script: |
-          # Utilisation des flags pour sauter la validation stricte des dépendances d'AGP
-          flutter build apk --release \
+          # --split-per-abi : produit 3 APKs séparés (arm64-v8a, armeabi-v7a,
+          # x86_64) au lieu d'un fat APK. Chaque APK ne contient les binaires
+          # natifs (flutter_webrtc, PdfiumAndroid, ExoPlayer...) que pour SA
+          # cible → économie de ~60 Mo sur l'APK distribué.
+          # → arm64-v8a couvre 95% des téléphones du marché (à privilégier).
+          flutter build apk --release --split-per-abi \
             --android-skip-build-dependency-validation \
             --dart-define=API_URL=https://backend-alanya.vercel.app \
             --dart-define=WS_URL=wss://alanya-ws.d-bria00.workers.dev
