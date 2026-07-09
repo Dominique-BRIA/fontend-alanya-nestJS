@@ -34,8 +34,21 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // FIX taille APK :
+            //  - isMinifyEnabled = true → active R8, retire le code Kotlin/Java
+            //    mort (Firebase, WebRTC, plugins non utilisés). Gain ~15-25 Mo.
+            //  - isShrinkResources = true → retire les ressources natives (.so,
+            //    drawables, strings) inutilisées. Gain ~5-10 Mo.
+            //  Ensemble = APK ~50-60 Mo au lieu de ~100 Mo.
+            //  Combiné avec --split-per-abi (codemagic.yaml) = ~25-35 Mo par ABI.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // Règles proguard/R8 : la version par défaut de Flutter suffit pour
+            // toutes les libs standards. On ajoute nos règles perso si besoin.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
