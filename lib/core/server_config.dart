@@ -1,29 +1,23 @@
 import 'package:flutter/foundation.dart';
 
 class ServerConfig {
-  // URL du backend Next.js (Vercel)
-  // On force l'URL de production même en Debug pour pouvoir tester sur des vrais téléphones.
+  // URL de l'API REST (NestJS)
+  // En dev : http://localhost:3000/api
+  // En prod : https://api.alanya.app/api
   static const String apiBase = String.fromEnvironment(
     'API_URL',
-    defaultValue: "https://alanya-api.onrender.com/api",
+    defaultValue: kReleaseMode 
+      ? 'https://api.alanya.app/api' 
+      : 'http://localhost:3000/api',
   );
 
-  // URL du serveur WebSocket.
-  //
-  // On passe désormais par un Cloudflare Worker qui proxifie vers Render
-  // (wss://alanya-ws.onrender.com). Motif : certains opérateurs mobiles
-  // africains (notamment au Cameroun) bloquent ou filtrent activement les
-  // domaines *.onrender.com, empêchant l'établissement de la WebSocket
-  // (errno=7 DNS lookup failed, errno=103 connection abort).
-  //
-  // Le Worker Cloudflare sort en IP Cloudflare, quasiment jamais filtrée,
-  // ce qui débloque les appels temps réel pour les utilisateurs concernés.
-  // Code du Worker : voir alanya-ws-worker.js à la racine du repo.
-  //
-  // Si tu veux revenir à Render en direct (test), passe --dart-define=WS_URL=wss://alanya-ws.onrender.com
+  // URL du serveur WebSocket (Socket.io)
+  // En dev : http://localhost:3000
+  // En prod : wss://api.alanya.app (Socket.io gère le upgrade HTTP→WS)
   static const String wsBase = String.fromEnvironment(
     'WS_URL',
-    defaultValue: "https://alanya-api.onrender.com/api",
+    defaultValue: kReleaseMode 
+      ? 'wss://api.alanya.app' 
+      : 'http://localhost:3000',
   );
 }
-

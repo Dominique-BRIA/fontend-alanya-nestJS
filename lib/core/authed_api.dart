@@ -1,12 +1,11 @@
 import 'dart:typed_data';
-
 import 'api_client.dart';
 import 'token_storage.dart';
 
 /// Enveloppe l'ApiClient pour injecter automatiquement l'access token et
 /// rafraîchir la session une fois en cas de 401.
 ///
-/// ⚠️ Un MUEX (verrou) sur le refresh empêche les requêtes concurrentes de
+/// ⚠️ Un MUTEX (verrou) sur le refresh empêche les requêtes concurrentes de
 /// lancer plusieurs refreshs en parallèle — ce qui révoquerait prématurément
 /// le refresh token (rotation serveur) et causerait des déconnexions 401.
 class AuthedApi {
@@ -27,6 +26,9 @@ class AuthedApi {
   Future<Map<String, dynamic>> patch(String path, Map<String, dynamic> body) =>
       _withAuth((token) => _api.patch(path, body, bearer: token));
 
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) =>
+      _withAuth((token) => _api.put(path, body, bearer: token));
+
   Future<Map<String, dynamic>> delete(String path) =>
       _withAuth((token) => _api.delete(path, bearer: token));
 
@@ -44,17 +46,17 @@ class AuthedApi {
     Future<Map<String, dynamic>> Function(String token) call,
   ) async {
     var token = await _storage.accessToken;
-    if (token == null) throw ApiException(401, "Session expirée");
+    if (token == null) throw ApiException(401, 'Session expirée');
+
     try {
       return await call(token);
     } on ApiException catch (e) {
       if (e.statusCode != 401) rethrow;
 
-      // --- Refresh synchronisé (mutex) ---
+      // Refresh synchronisé (mutex)
       // Si un refresh est déjà en cours, on attend son résultat au lieu d'en
       // lancer un nouveau. Évite la révocation prématurée du refresh token.
       final refreshed = await _refreshLocked();
-
       if (refreshed == null) rethrow;
 
       // Réessaie avec le nouveau token.
@@ -81,10 +83,13 @@ class AuthedApi {
   Future<String?> _doRefresh() async {
     final refresh = await _storage.refreshToken;
     if (refresh == null) return null;
+
     try {
-      final data = await _api.post("/api/auth/refresh", {"refreshToken": refresh});
-      final access = data["accessToken"] as String;
-      final newRefresh = data["refreshToken"] as String;
+      // ✅ NOUVEAU : Endpoint NestJS /api/auth/refresh attend { refreshToken }
+      final data = await _api.post('/api/auth/refresh', {'refreshToken': refresh});
+      // La réponse est déjà déballée par ApiClient._decode()
+      final access = data['accessToken'] as String;
+      final newRefresh = data['refreshToken'] as String;
       await _storage.saveTokens(access: access, refresh: newRefresh);
       return access;
     } catch (_) {

@@ -1,50 +1,69 @@
-import '../../core/api_client.dart';
 import '../../core/authed_api.dart';
 import '../../models/contact.dart';
 
 class ContactsRepository {
   ContactsRepository(this._api);
+
   final AuthedApi _api;
 
-  /// Recherche un utilisateur par son numéro Alanya à 6 chiffres.
-  Future<UserSearchResult> searchByNumber(String number) async {
-    final data = await _api.get("/api/users/search?number=$number");
+  /// Recherche un utilisateur par query (pseudo, email, publicNumber, nom).
+  /// ✅ NOUVEAU : Paramètre `q` au lieu de `number`
+  Future<UserSearchResult> searchByQuery(String query) async {
+    if (query.trim().isEmpty) throw ArgumentError('Query cannot be empty');
+    final data = await _api.get('/api/users/search?q=${Uri.encodeQueryComponent(query)}');
     return UserSearchResult.fromJson(data);
   }
 
-  /// Envoie un tableau de numéros à 6 chiffres et renvoie ceux qui sont sur Alanya.
-  /// Utilisé pour la synchronisation automatique du répertoire téléphonique.
+  /// Match plusieurs numéros - ❌ N'existe pas dans le backend NestJS.
+  /// Solution : Appeler searchByQuery pour chaque numéro ou implémenter côté backend.
   Future<List<UserSearchResult>> matchNumbers(List<String> numbers) async {
     if (numbers.isEmpty) return [];
-    final data = await _api.post("/api/users/match", {"numbers": numbers});
-    final raw = data["matched"] as List?;
-    if (raw == null) return [];
-    return raw
-        .map((u) => UserSearchResult.fromJson(u as Map<String, dynamic>))
-        .toList();
+    
+    final results = <UserSearchResult>[];
+    for (final number in numbers) {
+      try {
+        final result = await searchByQuery(number);
+        results.add(result);
+      } on ApiException catch (e) {
+        if (e.statusCode == 404) continue; // Pas trouvé, on ignore
+        rethrow;
+      }
+    }
+    return results;
   }
 
-  /// Charge la liste des contacts du répertoire.
+  /// Liste des contacts.
+  /// ✅ NOUVEAU : Retourne directement la liste (pas enveloppé dans "contacts")
   Future<List<Contact>> list() async {
-    final data = await _api.get("/api/contacts");
-    final raw = data["contacts"];
+    final data = await _api.get('/api/contacts');
+    final raw = data as List?; // data est déjà la liste déballée
     if (raw == null) return [];
-    return (raw as List)
+    return raw
         .map((c) => Contact.fromJson(c as Map<String, dynamic>))
         .toList();
   }
 
-  /// Ajoute un contact via son numéro Alanya à 6 chiffres.
+  /// Liste des contacts bloqués.
+  Future<List<Contact>> listBlocked() async {
+    final data = await _api.get('/api/contacts/blocked');
+    final raw = data as List?;
+    if (raw == null) return [];
+    return raw
+        .map((c) => Contact.fromJson(c as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Ajoute un contact via son numéro public à 6 chiffres.
+  /// ✅ Compatible : Le backend NestJS attend { contactPublicNumber, alias? }
   Future<Contact> add(String publicNumber, {String? alias}) async {
-    final data = await _api.post("/api/contacts", {
-      "publicNumber": publicNumber,
-      if (alias != null && alias.isNotEmpty) "alias": alias,
+    final data = await _api.post('/api/contacts', {
+      'contactPublicNumber': publicNumber,
+      if (alias != null && alias.isNotEmpty) 'alias': alias,
     });
     return Contact.fromJson(data);
   }
 
   /// Ajoute plusieurs contacts en une seule passe (import répertoire téléphonique).
-  /// Ignore silencieusement les doublons (code ALREADY_CONTACT).
   Future<int> addMany(List<({String publicNumber, String? alias})> entries) async {
     int added = 0;
     for (final e in entries) {
@@ -52,22 +71,34 @@ class ContactsRepository {
         await add(e.publicNumber, alias: e.alias);
         added++;
       } on ApiException catch (ex) {
-        if (ex.code == "ALREADY_CONTACT") continue; // déjà présent, on ignore
+        if (ex.code == 'ALREADY_CONTACT') continue; // déjà présent, on ignore
         rethrow;
       }
     }
     return added;
   }
 
-  Future<void> setBlocked(String contactId, bool blocked) async {
-    await _api.patch("/api/contacts/$contactId", {"isBlocked": blocked});
+  /// Met à jour le blocage d'un contact.
+  /// ✅ NOUVEAU : PUT /api/contacts/{contactId} avec { isBlocked }
+  Future<Contact> setBlocked(String contactId, bool blocked) async {
+    final data = await _api.put('/api/contacts/$contactId', {'isBlocked': blocked});
+    return Contact.fromJson(data);
   }
 
-  Future<void> setAlias(String contactId, String alias) async {
-    await _api.patch("/api/contacts/$contactId", {"alias": alias});
+  /// Met à jour l'alias d'un contact.
+  Future<Contact> setAlias(String contactId, String alias) async {
+    final data = await _api.put('/api/contacts/$contactId', {'alias': alias});
+    return Contact.fromJson(data);
   }
 
+  /// Supprime un contact.
   Future<void> remove(String contactId) async {
-    await _api.delete("/api/contacts/$contactId");
+    await _api.delete('/api/contacts/$contactId');
   }
+
+  /// Bloque un contact (raccourci).
+  Future<Contact> block(String contactId) => setBlocked(contactId, true);
+
+  /// Débloque un contact (raccourci).
+  Future<Contact> unblock(String contactId) => setBlocked(contactId, false);
 }
