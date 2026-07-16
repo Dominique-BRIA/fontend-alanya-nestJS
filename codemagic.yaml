@@ -4,7 +4,7 @@ workflows:
     max_build_duration: 60
 
     environment:
-      flutter: 3.24.5   # Version stable fixe
+      flutter: "3.24.3" # Version stable fixe
       java: 17
 
     scripts:
