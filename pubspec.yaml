@@ -26,7 +26,7 @@ dependencies:
   # Sélection de fichiers (images) pour l'envoi de médias
   file_picker: ^8.1.6
   # Mobile : enregistrement vocal, lecture audio, téléchargement
-  record: ^7.0.0
+  record: ^6.2.1
   audioplayers: ^6.1.0
   path_provider: ^2.1.5
   url_launcher: ^6.3.1
